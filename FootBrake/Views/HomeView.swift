@@ -61,7 +61,7 @@ struct HomeView: View {
                     Button {
                         showingDeviceInfo = true
                     } label: {
-                        Label("About This Device", systemImage: "info.circle")
+                        Label("About FootBrake", systemImage: "info.circle")
                     }
                 }
             }
@@ -83,7 +83,7 @@ struct HomeView: View {
             case .failure(let error): errorMessage = error.localizedDescription
             }
         }
-        .sheet(isPresented: $showingDeviceInfo) { DeviceInfoView() }
+        .sheet(isPresented: $showingDeviceInfo) { AboutView() }
         #if DEBUG
         // Simulator testing: `simctl launch … -FBOpen /path/to/clip.mov`
         .task {

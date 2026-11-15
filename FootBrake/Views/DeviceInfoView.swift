@@ -1,55 +1,39 @@
 import FootBrakeCore
 import SwiftUI
 
-/// App, device and VideoToolbox encoder details (the Stage 0 screen).
+/// Device and VideoToolbox encoder details, shown from the About screen.
 struct DeviceInfoView: View {
-    @Environment(\.dismiss) private var dismiss
     @State private var capabilities: [EncoderCapability] = []
     #if DEBUG
     @AppStorage(DebugSettings.simulateSoftwareEncoders) private var simulateSoftware = false
     #endif
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    LabeledContent("App", value: appVersion)
-                    LabeledContent("Core", value: FootBrakeCore.version)
-                    LabeledContent("Device", value: deviceDescription)
-                    LabeledContent("Background exports", value: backgroundExports)
-                }
-                Section("Video encoders") {
-                    ForEach(capabilities, id: \.codec) { cap in
-                        EncoderRow(capability: cap)
-                    }
-                }
-                #if DEBUG
-                Section {
-                    Toggle("Force software encoders", isOn: $simulateSoftware)
-                    NavigationLink("Measurement run") { MeasurementView() }
-                } header: {
-                    Text("Debug")
-                } footer: {
-                    Text("Shows the editor's warning and encodes with Apple's software encoder (iOS 17.4+), to test the slow path. Applies to videos opened after changing it.")
-                }
-                #endif
+        List {
+            Section {
+                LabeledContent("Device", value: deviceDescription)
+                LabeledContent("Background exports", value: backgroundExports)
             }
-            .navigationTitle("About This Device")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+            Section("Video encoders") {
+                ForEach(capabilities, id: \.codec) { cap in
+                    EncoderRow(capability: cap)
                 }
             }
-            .task { capabilities = Capabilities.probe() }
+            #if DEBUG
+            Section {
+                LabeledContent("Core", value: FootBrakeCore.version)
+                Toggle("Force software encoders", isOn: $simulateSoftware)
+                NavigationLink("Measurement run") { MeasurementView() }
+            } header: {
+                Text("Debug")
+            } footer: {
+                Text("Shows the editor's warning and encodes with Apple's software encoder (iOS 17.4+), to test the slow path. Applies to videos opened after changing it.")
+            }
+            #endif
         }
-    }
-
-    private var appVersion: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
-        let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "\(version) (\(build))"
+        .navigationTitle("Device & Encoders")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { capabilities = Capabilities.probe() }
     }
 
     private var backgroundExports: String {

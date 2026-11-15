@@ -352,7 +352,7 @@ paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable
 | **4. Small Streaming** | 10 MB / 25 MB target-size presets with size check + retry, size estimate in UI | Outputs ≤ target for a range of durations; send via Mail / Messenger |
 | **5. Fidelity** | HDR keep/tone-map, metadata copy, rotation edge cases, audio track selection | Saved-to-Photos item shows correct date/location/orientation; HDR badge |
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |
-| **7. Polish** | Custom preset editor, saved presets, Share Extension ("Open in FootBrake" from Photos) | Manual |
+| **7. Polish** | App icon, About/credits, App Store prep. **No share extension** (decision 2026-11-15): iOS won't let a share extension open its app, so it needed an extra "open FootBrake" step; importing from inside FootBrake is simpler | Manual |
 | **Later (not v1)** | Background re-encodes on devices without background GPU (incl. iPhone 17 Pro Max): replace the GPU video composition with `VTPixelRotationSession` + `VTPixelTransferSession`, *if* the media engine runs under a continued-processing task (untested). v1: copies run in the background (iOS 26+); re-encodes need FootBrake open | Only if users ask |
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
 | **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |
