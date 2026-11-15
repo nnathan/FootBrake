@@ -6,7 +6,7 @@ Paste into App Store Connect. Character limits in brackets.
 
 | Field                    | Value                                                           |
 |--------------------------|-----------------------------------------------------------------|
-| Name [30]                | FootBrake                                                       |
+| Name [30]                | FootBrake Transcoder                                            |
 | Subtitle [30]            | Shrink, trim & convert videos                                   |
 | Primary category         | Photo & Video                                                   |
 | Secondary category       | Utilities                                                       |
@@ -18,6 +18,9 @@ Paste into App Store Connect. Character limits in brackets.
 | Privacy policy URL       | https://github.com/nnathan/FootBrake/blob/main/PRIVACY.md       |
 | App privacy              | Data Not Collected                                              |
 | Encryption               | None beyond Apple's (ITSAppUsesNonExemptEncryption = NO is set) |
+
+"FootBrake" alone is reserved by another developer, so the store name is "FootBrake
+Transcoder". The name under the app icon on the home screen stays "FootBrake".
 
 ## Promotional text [170]
 
