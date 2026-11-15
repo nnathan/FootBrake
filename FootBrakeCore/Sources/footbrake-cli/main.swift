@@ -20,6 +20,13 @@ func metadataEdits(_ arguments: [String]) -> MetadataEdits {
     return edits
 }
 
+/// --audio-track <index | none>; index as listed by `probe` (audio 1 = 0).
+func audioTrackChoice(_ arguments: [String]) -> AudioTrackChoice {
+    guard let i = arguments.firstIndex(of: "--audio-track"), i + 1 < arguments.count else { return .automatic }
+    let value = arguments[i + 1]
+    return value == "none" ? .none : Int(value).map { .track($0) } ?? .automatic
+}
+
 let usage = """
     footbrake-cli \(FootBrakeCore.version)
 
@@ -31,6 +38,7 @@ let usage = """
 
     copy, shrink-audio and transcode also take:
       --no-location --no-device --date <2026-01-02T03:04:05+11:00 | remove>
+      --audio-track <0-based index | none>
 
       copy <in> <out> --start <time> --end <time> [--exact]
                       trim without re-encoding (default: start at previous keyframe)
@@ -76,6 +84,9 @@ func printMediaInfo(_ info: MediaInfo) {
     if let date = m.creationDate { print("  created:     \(date.ISO8601Format())") }
     if let loc = m.location { print("  location:    \(Format.coordinate(loc))") }
     if m.make != nil || m.model != nil { print("  device:      \([m.make, m.model, m.software].compactMap { $0 }.joined(separator: " "))") }
+    let c = info.camera
+    if let lens = c.lensModel { print("  lens:        \(lens) (+\(max(c.trackMetadataCount - 1, 0)) more track fields)") }
+    if !c.timedTracks.isEmpty { print("  camera data: \(c.timedTracks.count) timed tracks: \(c.timedTracks.joined(separator: ", "))") }
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
@@ -107,6 +118,7 @@ case "copy" where arguments.count >= 3:
     let began = Date()
     try await CopyExporter.export(source: source, range: range,
                                   mode: arguments.contains("--exact") ? .exact : .keyframe,
+                                  audioTrack: audioTrackChoice(arguments),
                                   metadata: metadataEdits(arguments), to: output)
     let result = try await MediaProbe.probe(output)
     print("wrote \(output.path): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
@@ -124,6 +136,7 @@ case "shrink-audio" where arguments.count >= 3:
     try await AudioReencoder.export(source: source, range: range,
                                     mode: arguments.contains("--exact") ? .exact : .keyframe,
                                     audioBitRate: (value("--kbps").flatMap(Int.init) ?? 96) * 1000,
+                                    audioTrack: audioTrackChoice(arguments),
                                     metadata: metadataEdits(arguments), to: output)
     let result = try await MediaProbe.probe(output)
     print("wrote \(output.lastPathComponent): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
@@ -139,6 +152,7 @@ case "transcode" where arguments.count >= 3:
     settings.keepHDR = !arguments.contains("--sdr")
     settings.forceSoftwareEncoder = arguments.contains("--software")
     settings.metadata = metadataEdits(arguments)
+    settings.audioTrack = audioTrackChoice(arguments)
     if let mb = option("--fit").flatMap(Double.init) { settings.targetFileSize = Int64(mb * 1_000_000) }
     settings.container = output.pathExtension.lowercased() == "mov" ? .mov : .mp4
     if let kbps = option("--audio").flatMap(Int.init) { settings.audio = AudioPlan(kbps: kbps) }   // 0 = keep

@@ -72,16 +72,18 @@ public enum CopyExporter {
         source: URL,
         range: CMTimeRange,
         mode: CopyCutMode,
+        audioTrack: AudioTrackChoice = .automatic,
         metadata edits: MetadataEdits = .none,
         to output: URL,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
-        // Apple's export session copies lens details and timed camera tracks
-        // it can't edit, so removing data goes through FootBrake's own
-        // lossless remux instead (same samples, camera data left out).
-        if edits.dropsCameraData {
+        // Apple's export session copies every track and can't edit lens details
+        // or timed camera tracks, so removing data or audio tracks goes through
+        // FootBrake's own lossless remux instead (same samples, camera data
+        // left out).
+        if edits.dropsCameraData || audioTrack != .automatic {
             try await AudioReencoder.export(source: source, range: range, mode: mode, audioBitRate: nil,
-                                            metadata: edits, to: output, progress: progress)
+                                            audioTrack: audioTrack, metadata: edits, to: output, progress: progress)
             return
         }
         let asset = AVURLAsset(url: source)

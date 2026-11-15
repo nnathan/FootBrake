@@ -5,14 +5,16 @@ import AVFoundation
 /// - an audio bitrate is chosen: the video is copied sample-for-sample (full
 ///   sharpness, HDR, rotation flag) and only the main audio track is
 ///   re-encoded to stereo AAC. Ideal for lectures and screen recordings.
-/// - metadata is being removed (`audioBitRate` nil): video and every audio
-///   track are copied, while lens details and timed camera tracks are left out.
+/// - metadata or audio tracks are being removed (`audioBitRate` nil): video and
+///   the chosen audio tracks are copied, while lens details and timed camera
+///   tracks are left out.
 public enum AudioReencoder {
     public static func export(
         source: URL,
         range: CMTimeRange,
         mode: CopyCutMode,
         audioBitRate: Int?,
+        audioTrack: AudioTrackChoice = .automatic,
         metadata edits: MetadataEdits = .none,
         to output: URL,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
@@ -23,7 +25,7 @@ public enum AudioReencoder {
             trimmed = CMTimeRange(start: start, end: range.end)
         }
         let job = try await AudioReencodeJob(source: source, range: trimmed, audioBitRate: audioBitRate,
-                                             edits: edits, fileType: CopyExporter.fileType(for: source),
+                                             audioTrack: audioTrack, edits: edits, fileType: CopyExporter.fileType(for: source),
                                              output: output)
         try await withTaskCancellationHandler {
             try await job.run(progress: progress)
@@ -45,7 +47,7 @@ final class AudioReencodeJob: @unchecked Sendable {
     private var cancelled = false
     private var readerStarted = false
 
-    init(source: URL, range: CMTimeRange, audioBitRate: Int?, edits: MetadataEdits,
+    init(source: URL, range: CMTimeRange, audioBitRate: Int?, audioTrack: AudioTrackChoice, edits: MetadataEdits,
          fileType: AVFileType, output: URL) async throws {
         self.range = range
         let asset = AVURLAsset(url: source)
@@ -75,9 +77,9 @@ final class AudioReencodeJob: @unchecked Sendable {
         let pairs = Array(zip(tracks, info.audio))
         var audio: [(AVAssetReaderTrackOutput, AVAssetWriterInput)] = []
         if let audioBitRate {
-            // The main stereo track (AAC rather than APAC) → stereo AAC.
-            if let (track, info) = pairs.first(where: { $0.1.codecFourCC == "aac " })
-                ?? pairs.first(where: { $0.1.codecFourCC != "apac" }) ?? pairs.first {
+            // The chosen track (by default the main stereo one) → stereo AAC.
+            if let index = audioTrack.singleTrack(in: info.audio), index < pairs.count {
+                let (track, info) = pairs[index]
                 let channels = min(2, max(1, info.channels))
                 let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
                     AVFormatIDKey: kAudioFormatLinearPCM,
@@ -95,8 +97,13 @@ final class AudioReencodeJob: @unchecked Sendable {
                 audio.append((output, input))
             }
         } else {
-            // Every audio track (including spatial audio) copied as-is.
-            for track in tracks {
+            // Copied as-is: every track (including spatial audio), one, or none.
+            let kept: [AVAssetTrack] = switch audioTrack {
+            case .automatic: tracks
+            case .track(let index): tracks.indices.contains(index) ? [tracks[index]] : tracks
+            case .none: []
+            }
+            for track in kept {
                 let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
                 let hint = try await track.load(.formatDescriptions).first
                 audio.append((output, AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: hint)))
@@ -124,7 +131,9 @@ final class AudioReencodeJob: @unchecked Sendable {
 
         let total = range.duration.seconds
         async let video: Void = pump(videoInput, videoOutput, queue: "video") { [range] time in
-            if total > 0 { progress(min(max((time - range.start).seconds / total, 0), 0.99)) }
+            // Passthrough readers also return marker buffers with no timestamp.
+            let fraction = (time - range.start).seconds / total
+            if total > 0, fraction.isFinite { progress(min(max(fraction, 0), 0.99)) }
         }
         async let audio: Void = withTaskGroup(of: Void.self) { group in
             for (index, pair) in self.audio.enumerated() {

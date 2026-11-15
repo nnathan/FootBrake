@@ -29,7 +29,7 @@ public enum MediaProbe {
         }
 
         let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-        return MediaInfo(
+        var info = MediaInfo(
             fileName: url.lastPathComponent,
             fileSize: fileSize,
             containerType: UTType(filenameExtension: url.pathExtension)?.identifier,
@@ -38,6 +38,39 @@ public enum MediaProbe {
             audio: audio,
             metadata: await captureMetadata(metadataItems)
         )
+        info.camera = await cameraData(asset, videoTrack: videoTrack)
+        return info
+    }
+
+    // MARK: - Camera data
+
+    private static func cameraData(_ asset: AVAsset, videoTrack: AVAssetTrack) async -> CameraData {
+        var data = CameraData()
+        let trackItems = (try? await videoTrack.load(.metadata)) ?? []
+        data.trackMetadataCount = trackItems.count
+        if let lens = trackItems.first(where: { $0.identifier?.rawValue.hasSuffix("camera.lens_model") == true }) {
+            data.lensModel = try? await lens.load(.stringValue)
+        }
+        for track in (try? await asset.loadTracks(withMediaType: .metadata)) ?? [] {
+            let keys = (try? await track.load(.formatDescriptions))?.first
+                .flatMap { CMMetadataFormatDescriptionGetIdentifiers($0) as? [String] } ?? []
+            data.timedTracks.append(describeTimedTrack(keys))
+        }
+        return data
+    }
+
+    /// A plain name for a timed metadata track from its keys.
+    static func describeTimedTrack(_ keys: [String]) -> String {
+        let names: [(String, String)] = [
+            ("detected-face", "detected faces"), ("live-photo", "Live Photo info"),
+            ("scene-illuminance", "scene brightness"), ("video-orientation", "orientation"),
+            ("cinematic", "Cinematic data"), ("segment-identifier", "segment markers"),
+            ("location", "location"),
+        ]
+        for (fragment, name) in names where keys.contains(where: { $0.contains(fragment) }) {
+            return name
+        }
+        return keys.first.map { String($0.split(separator: ".").last ?? Substring($0)) } ?? "camera data"
     }
 
     // MARK: - Video

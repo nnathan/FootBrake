@@ -20,6 +20,8 @@ struct EditorView: View {
 
     enum DateChoice: Hashable { case original, custom, remove }
 
+    /// Which audio track(s) to keep; chosen per video.
+    @State private var audioTrack: AudioTrackChoice = .automatic
     /// Audio picker value (0 = keep), remembered per preset in UserDefaults.
     @State private var audioKbps = 0
 
@@ -202,9 +204,11 @@ struct EditorView: View {
                 let job = ExportJob(source: model.source, metadata: metadataEdits)
                 switch (preset, audioKbps) {
                 case (.copy, 0):
-                    job.startCopy(range: model.selectionRange, mode: model.cutMode, wholeFile: model.isWholeFile)
+                    job.startCopy(range: model.selectionRange, mode: model.cutMode, audioTrack: effectiveAudioTrack,
+                                  wholeFile: model.isWholeFile)
                 case (.copy, let kbps):
-                    job.startShrinkAudio(range: model.selectionRange, mode: model.cutMode, audioBitRate: kbps * 1000)
+                    job.startShrinkAudio(range: model.selectionRange, mode: model.cutMode, audioBitRate: kbps * 1000,
+                                         audioTrack: effectiveAudioTrack)
                 default:
                     job.startTranscode(range: model.selectionRange, settings: transcodeSettings,
                                        suffix: preset.fileSuffix)
@@ -349,16 +353,26 @@ struct EditorView: View {
 
     @ViewBuilder
     private var audioOptions: some View {
-        Picker("Audio", selection: $audioKbps) {
-            Text("Keep").tag(0)
-            Text("64k").tag(64)
-            Text("96k").tag(96)
-            Text("128k").tag(128)
+        if !info.audio.isEmpty {
+            Picker("Audio track", selection: audioTrackSelection) {
+                if offersAllTracks {
+                    Text("All tracks").tag(AudioTrackChoice.automatic)
+                }
+                ForEach(info.audio.indices, id: \.self) { index in
+                    Text(trackLabel(index)).tag(AudioTrackChoice.track(index))
+                }
+                Text("No audio").tag(AudioTrackChoice.none)
+            }
         }
-        .pickerStyle(.segmented)
-        .onChange(of: audioKbps) { UserDefaults.standard.set($0, forKey: audioKey(preset)) }
-        if let audio = mainAudio {
-            LabeledContent("Audio now", value: "\(audio.codecName) \(audio.channelLayoutName), \(Format.bitRate(audio.bitRate))")
+        if effectiveAudioTrack != .none && !info.audio.isEmpty {
+            Picker("Audio", selection: $audioKbps) {
+                Text("Keep").tag(0)
+                Text("64k").tag(64)
+                Text("96k").tag(96)
+                Text("128k").tag(128)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: audioKbps) { UserDefaults.standard.set($0, forKey: audioKey(preset)) }
         }
         if let limit = preset.targetFileSize, preset != .copy {
             LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize)) (limit \(Format.bytes(limit)))")
@@ -367,16 +381,62 @@ struct EditorView: View {
         }
     }
 
-    private var estimatedSize: Int64 {
-        switch (preset, audioKbps) {
-        case (.copy, 0): model.estimatedCopySize
-        case (.copy, let kbps): model.estimatedShrinkAudioSize(audioBitRate: kbps * 1000)
-        default: model.estimatedSize(for: model.plan(for: transcodeSettings))
+    /// "All tracks" only makes sense for a lossless copy of a multi-track file.
+    private var offersAllTracks: Bool {
+        preset == .copy && audioKbps == 0 && info.audio.count > 1
+    }
+
+    private var isLosslessCopy: Bool { preset == .copy && audioKbps == 0 }
+
+    /// The choice the export uses. "Automatic" keeps every track in a lossless
+    /// copy and the main track otherwise; picking the only track of a
+    /// single-track file in a lossless copy is the same as automatic, so it
+    /// doesn't needlessly switch to the remux path.
+    private var effectiveAudioTrack: AudioTrackChoice {
+        switch audioTrack {
+        case .automatic where !isLosslessCopy:
+            return AudioTrackChoice.mainIndex(info.audio).map { .track($0) } ?? .none
+        case .track where isLosslessCopy && info.audio.count == 1:
+            return .automatic
+        default:
+            return audioTrack
         }
     }
 
-    private var mainAudio: AudioTrackInfo? {
-        info.audio.first { $0.codecFourCC == "aac " } ?? info.audio.first
+    /// What the picker shows: always one of its listed options.
+    private var audioTrackSelection: Binding<AudioTrackChoice> {
+        Binding(get: {
+            if audioTrack == .automatic && !offersAllTracks {
+                return AudioTrackChoice.mainIndex(info.audio).map { .track($0) } ?? .none
+            }
+            return audioTrack
+        }, set: { audioTrack = $0 })
+    }
+
+    private func trackLabel(_ index: Int) -> String {
+        let track = info.audio[index]
+        var label = track.codecFourCC == "apac"
+            ? "Spatial audio (\(track.channels)-channel)"
+            : "\(track.channelLayoutName) \(track.codecName), \(Format.bitRate(track.bitRate))"
+        if let language = track.languageCode {
+            label += " · " + (Locale.current.localizedString(forLanguageCode: language) ?? language)
+        }
+        return label
+    }
+
+    private var estimatedSize: Int64 {
+        let track = effectiveAudioTrack
+        switch (preset, audioKbps) {
+        case (.copy, 0) where track == .automatic:
+            return model.estimatedCopySize
+        case (.copy, 0):
+            let kept = track.singleTrack(in: info.audio).map { info.audio[$0].bitRate } ?? 0
+            return model.estimatedRemuxSize(keptAudioBitRate: track == .none ? 0 : kept)
+        case (.copy, let kbps):
+            return model.estimatedShrinkAudioSize(audioBitRate: track == .none ? 0 : kbps * 1000)
+        default:
+            return model.estimatedSize(for: model.plan(for: transcodeSettings))
+        }
     }
 
     private func audioKey(_ preset: OutputPreset) -> String { "exportAudioKbps.\(preset.rawValue)" }
@@ -387,6 +447,7 @@ struct EditorView: View {
 
     private var transcodeSettings: TranscodeSettings {
         var settings = preset.settings(codec: codec, frameRateCap: frameRateCap, keepHDR: keepHDR, audioKbps: audioKbps)
+        settings.audioTrack = effectiveAudioTrack
         #if DEBUG
         settings.forceSoftwareEncoder = UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders)
         #endif
@@ -408,8 +469,10 @@ struct EditorView: View {
             notes.append(model.cutMode == .keyframe
                 ? "Copies the video untouched. The clip starts at the keyframe at or before your start point, which plays everywhere."
                 : "Copies the video untouched and starts exactly at your start point. A few websites may show a short freeze at the start.")
-            if audioKbps > 0 {
-                notes.append("Only the main audio track is re-encoded; spatial audio and other extra tracks are left out.")
+            if audioKbps > 0 && effectiveAudioTrack != .none {
+                notes.append("Only the chosen audio track is re-encoded; other tracks, lens details and camera data are left out.")
+            } else if audioKbps == 0 && effectiveAudioTrack != .automatic {
+                notes.append("Other audio tracks, lens details and camera data are left out; the rest is copied untouched.")
             }
         } else {
             notes.append(codec == .hevc
@@ -429,7 +492,11 @@ struct EditorView: View {
                 notes.append("HDR will be converted to standard range, so it looks right on any screen.")
             }
         }
-        if audioKbps > 0 { notes.append("64k suits speech; 128k suits music.") }
+        if effectiveAudioTrack == .none && !info.audio.isEmpty {
+            notes.append("The exported video will have no sound.")
+        } else if audioKbps > 0 {
+            notes.append("64k suits speech; 128k suits music.")
+        }
         return notes.joined(separator: " ")
     }
 }

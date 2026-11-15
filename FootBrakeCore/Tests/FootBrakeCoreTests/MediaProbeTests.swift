@@ -130,3 +130,16 @@ struct MediaProbeUnitTests {
         #expect(Format.duration(3723.45) == "1:02:03.450")
     }
 }
+
+struct CameraDataTests {
+    @Test func timedTrackNames() {
+        #expect(MediaProbe.describeTimedTrack(["fiel/com.apple.quicktime.detected-face.bounds"]) == "detected faces")
+        #expect(MediaProbe.describeTimedTrack(["mdta/com.apple.quicktime.live-photo-info"]) == "Live Photo info")
+        #expect(MediaProbe.describeTimedTrack(["mdta/com.example.something"]) == "something")
+        #expect(MediaProbe.describeTimedTrack([]) == "camera data")
+    }
+
+    @Test(.enabled(if: Fixtures.available)) func syntheticClipsHaveNone() async throws {
+        #expect(try await MediaProbe.probe(Fixtures.url("iphone_metadata.mov")).camera.isEmpty)
+    }
+}

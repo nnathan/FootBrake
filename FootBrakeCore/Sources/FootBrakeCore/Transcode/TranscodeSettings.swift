@@ -60,6 +60,8 @@ public struct TranscodeSettings: Sendable, Equatable, Codable {
     public var container: OutputContainer
     /// Remove location / device info, or change the recording date.
     public var metadata: MetadataEdits = .none
+    /// Which audio track to encode, or none.
+    public var audioTrack: AudioTrackChoice = .automatic
     /// Fit the output under this many bytes (decimal MB presets). Overrides
     /// `maxShortSide` and `rateControl`: both are derived from the budget.
     public var targetFileSize: Int64?
@@ -129,7 +131,8 @@ public struct TranscodePlan: Sendable, Equatable {
         if let target = settings.targetFileSize {
             let fit = Self.fit(target: target, duration: duration ?? source.duration, display: display,
                                frameRate: frameRate, codec: settings.codec,
-                               audioBitRate: Self.audioBitRate(settings.audio, source: source),
+                               audioBitRate: Self.audioBitRate(settings.audio, track: settings.audioTrack,
+                                                               source: source),
                                sourceBitRate: video?.bitRate ?? 0)
             outputSize = fit.size
             rateControl = .averageBitRate(fit.videoBitRate)
@@ -174,8 +177,10 @@ public struct TranscodePlan: Sendable, Equatable {
     }
 
     /// Audio bits per second this plan will spend (for size budgets and estimates).
-    public static func audioBitRate(_ plan: AudioPlan, source: MediaInfo) -> Int {
-        let main = source.audio.first { $0.codecFourCC == "aac " } ?? source.audio.first
+    public static func audioBitRate(_ plan: AudioPlan, track: AudioTrackChoice = .automatic,
+                                    source: MediaInfo) -> Int {
+        guard let index = track.singleTrack(in: source.audio) else { return 0 }
+        let main: AudioTrackInfo? = source.audio[index]
         switch plan {
         case .aac(let bps): return main.map { min(bps, Int($0.bitRate)) } ?? bps
         case .keep: return Int(main?.bitRate ?? 160_000)

@@ -100,7 +100,8 @@ final class EditorModel: ObservableObject {
         case .averageBitRate(let bps), .variableBitRate(let bps): bps
         case .constantQuality, .fixedQuality: Int(source.info.video?.bitRate ?? 0)
         }
-        let audioBps = TranscodePlan.audioBitRate(plan.settings.audio, source: source.info)
+        let audioBps = TranscodePlan.audioBitRate(plan.settings.audio, track: plan.settings.audioTrack,
+                                                  source: source.info)
         return Int64(Double(videoBps + audioBps) * selectionDuration / 8)
     }
 
@@ -109,6 +110,13 @@ final class EditorModel: ObservableObject {
         let seconds = end - effectiveStart
         let video = source.info.video?.bitRate ?? 0
         return Int64((video + Double(audioBitRate)) * seconds / 8)
+    }
+
+    /// A lossless copy that keeps only some audio: the video plus the kept
+    /// tracks' bitrates (`keptAudioBitRate`), over the selection.
+    func estimatedRemuxSize(keptAudioBitRate: Double) -> Int64 {
+        let seconds = end - effectiveStart
+        return Int64(((source.info.video?.bitRate ?? 0) + keptAudioBitRate) * seconds / 8)
     }
 
     /// Copy size scales with duration, since every sample is kept as-is.

@@ -12,6 +12,7 @@ struct ExportSheet: View {
     @State private var fileName = ""
     @State private var actions: [CompletedAction] = []
     @State private var banner: CompletedAction?
+    @State private var showingDetails = false
     @FocusState private var editingName: Bool
 
     struct CompletedAction: Identifiable, Equatable {
@@ -119,14 +120,23 @@ struct ExportSheet: View {
 
     private func finished(url: URL, info: MediaInfo, seconds: Double) -> some View {
         VStack(spacing: 24) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.green)
+            ExportPreview(url: url)
 
             VStack(spacing: 6) {
                 nameField(url)
-                Text("\(Format.duration(info.duration)) · \(Format.bytes(info.fileSize))")
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text("\(Format.duration(info.duration)) · \(Format.bytes(info.fileSize)) ·")
+                        .foregroundStyle(.secondary)
+                    Button {
+                        showingDetails = true
+                    } label: {
+                        Label("Details", systemImage: "info.circle")
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .sheet(isPresented: $showingDetails) {
+                    SourceInfoView(info: info, original: job.source.info)
+                }
                 Text("Done in \(String(format: "%.1f", seconds)) s · was \(Format.bytes(job.source.info.fileSize))")
                     .font(.caption)
                     .foregroundStyle(.secondary)

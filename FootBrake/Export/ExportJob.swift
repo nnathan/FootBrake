@@ -124,22 +124,22 @@ final class ExportJob: ObservableObject, Identifiable {
     /// "Copying…" or "Encoding…", shown while running.
     private(set) var activity = "Copying…"
 
-    func startCopy(range: CMTimeRange, mode: CopyCutMode, wholeFile: Bool) {
+    func startCopy(range: CMTimeRange, mode: CopyCutMode, audioTrack: AudioTrackChoice, wholeFile: Bool) {
         activity = "Copying…"
         let metadata = metadata
         run(suffix: wholeFile ? "copy" : "trimmed", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
-            try await CopyExporter.export(source: source, range: range, mode: mode, metadata: metadata,
-                                          to: output, progress: progress)
+            try await CopyExporter.export(source: source, range: range, mode: mode, audioTrack: audioTrack,
+                                          metadata: metadata, to: output, progress: progress)
             return nil
         }
     }
 
-    func startShrinkAudio(range: CMTimeRange, mode: CopyCutMode, audioBitRate: Int) {
+    func startShrinkAudio(range: CMTimeRange, mode: CopyCutMode, audioBitRate: Int, audioTrack: AudioTrackChoice) {
         activity = "Shrinking audio…"
         let metadata = metadata
         run(suffix: "smaller audio", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
             try await AudioReencoder.export(source: source, range: range, mode: mode, audioBitRate: audioBitRate,
-                                            metadata: metadata, to: output, progress: progress)
+                                            audioTrack: audioTrack, metadata: metadata, to: output, progress: progress)
             return nil
         }
     }
@@ -176,6 +176,7 @@ final class ExportJob: ObservableObject, Identifiable {
                 let output = try OutputStore.url(for: source.url, suffix: suffix, fileType: fileType)
                 encoderNote = try await work(source.url, output) { p in
                     Task { @MainActor in
+                        guard p.isFinite else { return }
                         if case .running = self.state { self.state = .running(progress: p) }
                         self.updateBackgroundTask(progress: p)
                     }
@@ -233,7 +234,9 @@ final class ExportJob: ObservableObject, Identifiable {
             .appendingPathComponent(clean)
             .appendingPathExtension(url.pathExtension)
         guard target != url, (try? FileManager.default.moveItem(at: url, to: target)) != nil else { return }
-        state = .finished(url: target, info: info, seconds: seconds)
+        var renamed = info
+        renamed.fileName = target.lastPathComponent
+        state = .finished(url: target, info: renamed, seconds: seconds)
     }
 
     /// A copy of the finished file with the same name but different bytes

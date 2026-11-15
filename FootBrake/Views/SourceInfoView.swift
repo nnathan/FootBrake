@@ -1,34 +1,41 @@
 import FootBrakeCore
 import SwiftUI
 
-/// Everything `MediaProbe` found out about the source video.
+/// Everything `MediaProbe` found out about a video. Given the original too
+/// (for an export), it offers an Export | Original switch and highlights
+/// what changed. Missing capture data is shown as "Not in file" rather than
+/// hidden, so a removal is visible.
 struct SourceInfoView: View {
     let info: MediaInfo
+    /// The source, when `info` describes an export of it.
+    var original: MediaInfo?
     @Environment(\.dismiss) private var dismiss
+    @State private var showingOriginal = false
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    LabeledContent("Format", value: Format.containerName(info.containerType))
-                    LabeledContent("Size", value: Format.bytes(info.fileSize))
-                    LabeledContent("Duration", value: Format.duration(info.duration))
-                    LabeledContent("Overall bitrate", value: Format.bitRate(info.overallBitRate))
-                } header: {
-                    badges
+                if original != nil {
+                    Picker("Show", selection: $showingOriginal) {
+                        Text("Export").tag(false)
+                        Text("Original").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
 
-                if let video = info.video {
-                    videoSection(video)
+                ForEach(sections(for: shown)) { section in
+                    Section {
+                        ForEach(section.rows) { row in
+                            rowView(row, previous: comparison?.value(section: section.id, row: row.id))
+                        }
+                    } header: {
+                        if section.id == "file" { badges(for: shown) } else { Text(section.title) }
+                    }
                 }
-
-                ForEach(Array(info.audio.enumerated()), id: \.offset) { index, audio in
-                    audioSection(audio, number: index + 1)
-                }
-
-                captureSection
             }
-            .navigationTitle(info.fileName)
+            .navigationTitle(shown.fileName)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -38,65 +45,130 @@ struct SourceInfoView: View {
         }
     }
 
-    // MARK: - Sections
+    private var shown: MediaInfo { showingOriginal ? original ?? info : info }
 
-    private func videoSection(_ video: VideoTrackInfo) -> some View {
-        Section("Video") {
-            LabeledContent("Codec", value: [video.codecName, video.profile].compactMap { $0 }.joined(separator: " · "))
-            LabeledContent("Resolution", value: dimensions(video.displaySize))
-            if video.rotation != 0 {
-                LabeledContent("Stored as", value: "\(dimensions(video.codedSize)), rotated \(video.rotation)°")
+    /// Values to compare against: the original's, while showing the export.
+    private var comparison: Rows? {
+        guard let original, !showingOriginal else { return nil }
+        return Rows(sections(for: original))
+    }
+
+    // MARK: - Rows
+
+    struct InfoRow: Identifiable {
+        let id: String
+        let value: String
+        var link: URL?
+    }
+
+    struct InfoSection: Identifiable {
+        let id: String
+        let title: String
+        let rows: [InfoRow]
+    }
+
+    struct Rows {
+        let values: [String: String]
+        init(_ sections: [InfoSection]) {
+            var values: [String: String] = [:]
+            for section in sections {
+                for row in section.rows { values["\(section.id)/\(row.id)"] = row.value }
             }
-            LabeledContent("Frame rate", value: frameRateText(video))
-            LabeledContent("Bitrate", value: Format.bitRate(video.bitRate))
-            LabeledContent("Bit depth", value: "\(video.bitDepth)-bit")
-            LabeledContent("Dynamic range", value: video.hdrFormat.rawValue)
+            self.values = values
+        }
+        func value(section: String, row: String) -> String? { values["\(section)/\(row)"] }
+    }
+
+    @ViewBuilder
+    private func rowView(_ row: InfoRow, previous: String?) -> some View {
+        let changed = comparison != nil && previous != row.value
+        LabeledContent {
+            VStack(alignment: .trailing, spacing: 2) {
+                if let link = row.link {
+                    Link(row.value, destination: link)
+                } else {
+                    Text(row.value)
+                        .foregroundStyle(changed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                        .fontWeight(changed ? .semibold : .regular)
+                }
+                if changed {
+                    Text("was \(previous ?? "not shown")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .multilineTextAlignment(.trailing)
+        } label: {
+            Text(row.id)
+        }
+    }
+
+    private func sections(for info: MediaInfo) -> [InfoSection] {
+        var sections = [InfoSection(id: "file", title: "File", rows: [
+            InfoRow(id: "Format", value: Format.containerName(info.containerType)),
+            InfoRow(id: "Size", value: Format.bytes(info.fileSize)),
+            InfoRow(id: "Duration", value: Format.duration(info.duration)),
+            InfoRow(id: "Overall bitrate", value: Format.bitRate(info.overallBitRate)),
+            InfoRow(id: "Audio tracks", value: info.audio.isEmpty ? "None" : "\(info.audio.count)"),
+        ])]
+
+        if let video = info.video {
+            var rows = [
+                InfoRow(id: "Codec", value: [video.codecName, video.profile].compactMap { $0 }.joined(separator: " · ")),
+                InfoRow(id: "Resolution", value: dimensions(video.displaySize)),
+                InfoRow(id: "Stored as", value: video.rotation == 0
+                        ? "Upright" : "\(dimensions(video.codedSize)), rotated \(video.rotation)°"),
+                InfoRow(id: "Frame rate", value: frameRateText(video)),
+                InfoRow(id: "Bitrate", value: Format.bitRate(video.bitRate)),
+                InfoRow(id: "Bit depth", value: "\(video.bitDepth)-bit"),
+                InfoRow(id: "Dynamic range", value: video.hdrFormat.rawValue),
+            ]
             if let primaries = video.colorPrimaries {
-                LabeledContent("Color", value: [primaries, video.transferFunction, video.matrix]
-                    .compactMap { $0 }.map(colorName).joined(separator: " / "))
+                rows.append(InfoRow(id: "Color", value: [primaries, video.transferFunction, video.matrix]
+                    .compactMap { $0 }.map(colorName).joined(separator: " / ")))
             }
+            sections.append(InfoSection(id: "video", title: "Video", rows: rows))
         }
-    }
 
-    private func audioSection(_ audio: AudioTrackInfo, number: Int) -> some View {
-        Section(info.audio.count > 1 ? "Audio \(number)" : "Audio") {
-            LabeledContent("Codec", value: audio.codecName)
-            LabeledContent("Channels", value: audio.channelLayoutName)
-            LabeledContent("Sample rate", value: "\(Int(audio.sampleRate)) Hz")
-            LabeledContent("Bitrate", value: Format.bitRate(audio.bitRate))
+        for (index, audio) in info.audio.enumerated() {
+            var rows = [
+                InfoRow(id: "Codec", value: audio.codecName),
+                InfoRow(id: "Channels", value: audio.channelLayoutName),
+                InfoRow(id: "Sample rate", value: "\(Int(audio.sampleRate)) Hz"),
+                InfoRow(id: "Bitrate", value: Format.bitRate(audio.bitRate)),
+            ]
             if let language = audio.languageCode {
-                LabeledContent("Language", value: Locale.current.localizedString(forLanguageCode: language) ?? language)
+                rows.append(InfoRow(id: "Language",
+                                    value: Locale.current.localizedString(forLanguageCode: language) ?? language))
             }
+            sections.append(InfoSection(id: "audio\(index)", title: "Audio \(index + 1)", rows: rows))
         }
+
+        let meta = info.metadata, camera = info.camera
+        let notInFile = "Not in file"
+        let device = [meta.make, meta.model].compactMap { $0 }.joined(separator: " ")
+        sections.append(InfoSection(id: "capture", title: "Capture", rows: [
+            InfoRow(id: "Recorded", value: meta.creationDate?.formatted(date: .abbreviated, time: .standard) ?? notInFile),
+            meta.location.map { InfoRow(id: "Location", value: Format.coordinate($0), link: mapsURL($0)) }
+                ?? InfoRow(id: "Location", value: notInFile),
+            InfoRow(id: "Device", value: device.isEmpty ? notInFile : device),
+            InfoRow(id: "Software", value: meta.software ?? notInFile),
+            InfoRow(id: "Lens details", value: camera.lensModel
+                    ?? (camera.trackMetadataCount > 0 ? "\(camera.trackMetadataCount) fields" : notInFile)),
+            InfoRow(id: "Camera data", value: camera.timedTracks.isEmpty
+                    ? "None" : "\(camera.timedTracks.count) tracks: \(camera.timedTracks.joined(separator: ", "))"),
+        ]))
+        return sections
     }
 
-    @ViewBuilder
-    private var captureSection: some View {
-        let meta = info.metadata
-        if meta.creationDate != nil || meta.location != nil || meta.model != nil {
-            Section("Capture") {
-                if let date = meta.creationDate {
-                    LabeledContent("Recorded", value: date.formatted(date: .abbreviated, time: .standard))
-                }
-                if let location = meta.location {
-                    LabeledContent("Location") {
-                        Link(Format.coordinate(location), destination: mapsURL(location))
-                    }
-                }
-                if let model = meta.model {
-                    LabeledContent("Device", value: [meta.make, model].compactMap { $0 }.joined(separator: " "))
-                }
-                if let software = meta.software {
-                    LabeledContent("Software", value: software)
-                }
-            }
-        }
-    }
+    // MARK: - Badges and formatting
 
     @ViewBuilder
-    private var badges: some View {
-        let tags = badgeTexts
-        if !tags.isEmpty {
+    private func badges(for info: MediaInfo) -> some View {
+        let tags = badgeTexts(info)
+        if tags.isEmpty {
+            Text("File")
+        } else {
             HStack(spacing: 6) {
                 ForEach(tags, id: \.self) { tag in
                     Text(tag)
@@ -112,7 +184,7 @@ struct SourceInfoView: View {
         }
     }
 
-    private var badgeTexts: [String] {
+    private func badgeTexts(_ info: MediaInfo) -> [String] {
         guard let video = info.video else { return [] }
         var tags: [String] = []
         if video.hdrFormat.isHDR { tags.append(video.hdrFormat.rawValue) }
@@ -120,8 +192,6 @@ struct SourceInfoView: View {
         if video.isPortrait { tags.append("Portrait") }
         return tags
     }
-
-    // MARK: - Formatting
 
     private func dimensions(_ size: CGSize) -> String {
         "\(Int(size.width)) × \(Int(size.height))"

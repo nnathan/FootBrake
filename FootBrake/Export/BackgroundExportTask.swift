@@ -50,8 +50,9 @@ final class BackgroundExportTask {
     }
 
     func update(progress fraction: Double) {
-        progress = fraction
-        task?.progress.completedUnitCount = Int64(fraction * Double(Self.progressUnits))
+        guard fraction.isFinite else { return }   // Int64(.nan) would crash
+        progress = min(max(fraction, 0), 1)
+        task?.progress.completedUnitCount = Int64(progress * Double(Self.progressUnits))
     }
 
     func finish(success: Bool) {

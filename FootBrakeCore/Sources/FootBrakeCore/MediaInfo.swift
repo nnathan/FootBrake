@@ -12,6 +12,8 @@ public struct MediaInfo: Sendable, Equatable {
     public var video: VideoTrackInfo?
     public var audio: [AudioTrackInfo]
     public var metadata: CaptureMetadata
+    /// Camera details beyond the file-level capture metadata.
+    public var camera = CameraData()
 
     /// Overall bitrate of the file in bits per second.
     public var overallBitRate: Double {
@@ -163,4 +165,23 @@ public struct GeoLocation: Sendable, Equatable {
         self.longitude = longitude
         self.altitude = altitude
     }
+}
+
+/// Device data the iPhone camera stores outside the file-level metadata:
+/// lens details on the video track, and timed metadata tracks.
+public struct CameraData: Sendable, Equatable {
+    /// e.g. "iPhone 17 Pro Max back camera 6.765mm f/1.78".
+    public var lensModel: String?
+    /// Other camera metadata on the video track (focal length, aperture, maker notes).
+    public var trackMetadataCount = 0
+    /// One plain description per timed metadata track, e.g. "detected faces".
+    public var timedTracks: [String] = []
+
+    public init(lensModel: String? = nil, trackMetadataCount: Int = 0, timedTracks: [String] = []) {
+        self.lensModel = lensModel
+        self.trackMetadataCount = trackMetadataCount
+        self.timedTracks = timedTracks
+    }
+
+    public var isEmpty: Bool { lensModel == nil && trackMetadataCount == 0 && timedTracks.isEmpty }
 }

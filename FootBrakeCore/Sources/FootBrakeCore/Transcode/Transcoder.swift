@@ -167,8 +167,10 @@ final class TranscodeJob: @unchecked Sendable {
         writer.add(videoInput)
 
         // Audio: the main stereo track (iPhone's AAC rather than APAC spatial).
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
         if plan.settings.audio != .none,
-           let (track, audio) = try await Self.mainAudioTrack(asset, info: info) {
+           let index = plan.settings.audioTrack.singleTrack(in: info.audio), index < audioTracks.count {
+            let track = audioTracks[index], audio = info.audio[index]
             let bitRate: Int
             let passthrough: Bool
             switch plan.settings.audio {
@@ -296,7 +298,7 @@ final class TranscodeJob: @unchecked Sendable {
                     guard keep(time.seconds), let image = frame.imageBuffer else { continue }
                     encode(image, at: time)
                     let fraction = total > 0 ? (time - range.start).seconds / total : 0
-                    if fraction - lastReported >= 0.01 {
+                    if fraction.isFinite, fraction - lastReported >= 0.01 {
                         lastReported = fraction
                         progress(min(max(fraction, 0), 0.99))
                     }
@@ -494,13 +496,6 @@ final class TranscodeJob: @unchecked Sendable {
             try set(kVTCompressionPropertyKey_Quality, q as CFNumber)
             return mode
         }
-    }
-
-    /// Prefers stereo AAC (the iPhone records AAC + APAC spatial audio).
-    private static func mainAudioTrack(_ asset: AVAsset, info: MediaInfo) async throws -> (AVAssetTrack, AudioTrackInfo)? {
-        let tracks = try await asset.loadTracks(withMediaType: .audio)
-        let pairs = Array(zip(tracks, info.audio))
-        return pairs.first { $0.1.codecFourCC == "aac " } ?? pairs.first { $0.1.codecFourCC != "apac" } ?? pairs.first
     }
 
     /// Creation date, location and device survive a transcode. AVAssetWriter
