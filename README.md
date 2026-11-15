@@ -5,6 +5,19 @@ Shrink and trim iPhone videos with the hardware encoder. See `PLAN.md`.
 Free software in the spirit of [HandBrake](https://handbrake.fr): no ads, no monetisation, no
 telemetry. FootBrake will always respect its users.
 
+<p>
+  <img src="Design/readme/home.webp" width="240" alt="Home screen">
+  <img src="Design/readme/editor.webp" width="240" alt="Editor with the trim timeline">
+  <img src="Design/readme/export.webp" width="240" alt="A finished export, 33.1 MB down to 2.9 MB">
+</p>
+
+Choose a preset and what metadata to keep, then compare the export with the original:
+
+<p>
+  <img src="Design/readme/editor-scroll.webp" width="300" alt="Scrolling through the export settings">
+  <img src="Design/readme/export-details.webp" width="300" alt="Export details, showing what changed from the original">
+</p>
+
 ## Devices
 
 FootBrake runs on iPhone and iPad with iOS 16 or later. It has been tested on an iPhone 17 Pro

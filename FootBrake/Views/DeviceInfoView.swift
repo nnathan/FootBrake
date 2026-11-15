@@ -88,5 +88,8 @@ private struct EncoderRow: View {
 /// UserDefaults keys for debug-only switches. Compiled out of release builds.
 enum DebugSettings {
     static let simulateSoftwareEncoders = "debug.simulateSoftwareEncoders"
+    /// `-FBDemo`: README recordings in the simulator, which has no hardware
+    /// encoders, look as they would on an iPhone.
+    static let isDemo = ProcessInfo.processInfo.arguments.contains("-FBDemo")
 }
 #endif

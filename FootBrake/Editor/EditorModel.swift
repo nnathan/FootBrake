@@ -70,14 +70,15 @@ final class EditorModel: ObservableObject {
     var isWholeFile: Bool { start <= 0.001 && end >= duration - 0.001 }
 
     /// Encoder support on this device, probed once. In debug builds the
-    /// About screen can pretend there are only software encoders.
+    /// About screen can pretend there are only software encoders, and
+    /// `-FBDemo` that they are all hardware.
     let capabilities: [EncoderCapability] = {
         let probed = Capabilities.probe()
         #if DEBUG
-        if UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders) {
+        if UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders) || DebugSettings.isDemo {
             return probed.map {
                 EncoderCapability(codec: $0.codec, encoderID: $0.encoderID, isAvailable: $0.isAvailable,
-                                  isHardwareAccelerated: false, supports10Bit: $0.supports10Bit,
+                                  isHardwareAccelerated: DebugSettings.isDemo, supports10Bit: $0.supports10Bit,
                                   supportsConstantQuality: $0.supportsConstantQuality,
                                   supportsSpeedPriority: $0.supportsSpeedPriority)
             }

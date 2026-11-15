@@ -159,7 +159,11 @@ final class ExportJob: ObservableObject, Identifiable {
                 }
             }
             let codec = settings.codec == .hevc ? "HEVC" : "H.264"
-            return result.usedHardwareEncoder.map { $0 ? "Encoded with hardware \(codec)" : "Encoded in software (\(codec))" }
+            var usedHardware = result.usedHardwareEncoder
+            #if DEBUG
+            if DebugSettings.isDemo { usedHardware = true }
+            #endif
+            return usedHardware.map { $0 ? "Encoded with hardware \(codec)" : "Encoded in software (\(codec))" }
         }
     }
 
