@@ -1,0 +1,3 @@
+// Shared build settings for the FootBrake app target.
+// Per-developer signing lives in Local.xcconfig (not committed).
+#include? "Local.xcconfig"
