@@ -151,20 +151,44 @@ through as in 3a.
 progress (`last PTS / range duration`) as an `AsyncStream<Progress>` and
 supports cancel (`reader.cancelReading()`, `writer.cancelWriting()`).
 
-### 3c. Rate control & "fits in N MB"
-- Quality presets use **average bitrate** derived from bits-per-pixel:
-  `bps = width × height × fps × bpp`. Here `bpp ≈ 0.10` for H.264 and `≈ 0.06`
-  for HEVC, tuned during testing. We cap it at the source bitrate, because
-  re-encoding should never make a file bigger.
-- Target-size presets work like HandBrake's "Social 10/25 MB" presets:
-  `videoBps = (targetBytes × 8 × 0.95) / duration − audioBps`, plus a
-  `DataRateLimits` peak cap. Single-pass hardware rate control can overshoot,
-  so after encoding we check the size. If it's over the limit, we re-encode
-  once at a reduced bitrate. (Later: two-pass via `VTMultiPassStorage` if the
-  device supports it.)
-- Constant-quality (`kVTCompressionPropertyKey_Quality`) is probed at runtime.
-  HandBrake's VT presets use it on Apple Silicon Macs, but support on A-series
-  phones is not guaranteed.
+### 3c. Rate control & "fits in N MB" (revised 2026-11-15)
+"Constant quality" and "variable bitrate" are not opposites: a good
+constant-quality mode (x264 CRF) *is* VBR. What matters is which VideoToolbox
+mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
+
+| Mode | iOS | Behaviour | Use |
+|---|---|---|---|
+| `ConstantQualityFactor` (0–1) | 27+ | CRF-like: "consistent visual quality with or without bitrate limit" | Resolution presets on iOS 27+ |
+| `VariableBitRate` + `VBVMaxBitRate` | 26+ | True VBR: "allocates higher bitrate for complex segments" | Resolution presets on iOS 26; size presets on 26+ |
+| `AverageBitRate` + `DataRateLimits` | 8+ | Soft average target plus hard peak cap (VBR in practice) | Fallback for iOS 16–25, all presets |
+| `Quality` | 8+ | "For some formats… a fixed quantization parameter". This is constant QP, not CRF, so it's inefficient | Not a default; maybe a hidden advanced option |
+| `ConstantBitRate` | 16+ | Legacy CBR | Never |
+| Multi-pass | n/a | Not available on iOS | n/a |
+
+- Bitrate targets come from bits-per-pixel: `bps = width × height × fps × bpp`,
+  starting at `bpp ≈ 0.10` (H.264) and `≈ 0.06` (HEVC). 60 fps uses about ×1.5,
+  not ×2. We cap at the source bitrate, because re-encoding should never grow
+  a file.
+- Target-size presets: `videoBps = (targetBytes × 8 × 0.95) / duration − audioBps`.
+  Single-pass can overshoot, so we check the size after encoding and re-encode
+  once at a reduced bitrate if it's over.
+- The capability probe detects each mode per device. A **debug override**
+  forces older code paths (ABR-only, no 10-bit) so fallbacks can be tested on a
+  new phone.
+- **Defaults are set by measurement** (Stage 3): file size vs VMAF over the
+  fixtures and real camera clips, for each mode and setting.
+
+### Test devices & OS plan
+- **iPhone 17 Pro Max** is the primary test device. Stage 3 measures the
+  iOS 26.7.1 paths first (`VariableBitRate`, and the forced
+  `AverageBitRate` fallback). Then the phone is upgraded to **iOS 27.2** to
+  measure `ConstantQualityFactor`. The upgrade is one-way.
+- Mac (`footbrake-cli`): fast bulk runs and relative comparisons; macOS 27
+  is not required.
+- Simulator: UI only (no hardware encoder).
+- Before App Store submission: a used iPhone 8/X (A11, stuck on iOS 16) or
+  TestFlight testers, to check the slowest chip, oldest iOS, and memory/thermal
+  limits.
 
 ### 3d. Correctness details we'll handle
 - **Rotation:** portrait iPhone video is stored 1920×1080 with a 90° transform.
@@ -190,6 +214,21 @@ on older iOS.
   If the app gets interrupted, the job fails cleanly and offers a restart.
 - We watch `ProcessInfo.thermalState` and show a warning when the device runs
   hot.
+
+## 3f. Real iPhone 17 Pro Max footage (Stage 1 findings, 2026-11-15)
+- Video: HEVC Main 10, **Dolby Vision profile 8.4** (HLG base layer), BT.2020.
+  Portrait clips are stored landscape with a 90° rotation.
+- Frame timing really is variable. A 4K60 clip averages ~59.9 fps with single
+  frames as close as 15 ms apart, so the frame-rate cap must work on
+  timestamps.
+- Audio: **two tracks**, AAC stereo (~130–200 kbps) plus **APAC spatial audio**
+  (4–5 channel ambisonic, ~400–500 kbps). Size presets should drop APAC by
+  default; Copy mode keeps it.
+- 2–6 timed-metadata tracks (`mebx`, camera/stabilisation data). These are
+  dropped on transcode; Copy mode keeps them if AVAssetWriter allows.
+- Cinematic mode: the picker gives a rendered file (focus effect baked in, no
+  depth track) tagged `com.apple.quicktime.cinematic-video`. Treat it as normal
+  video.
 
 ## 4. Presets (inspired by `~/code/handbrake/preset/preset_builtin.json`)
 
@@ -218,9 +257,11 @@ on older iOS.
   gets fewer bits. The UI notes "60 fps will look softer at this size".
   (HandBrake's Social presets use 60. We default to 30 because at 10–25 MB
   sharpness matters more than smoothness.)
-- **Slo-mo (120/240 fps) recordings:** with a 30/60 cap they play at real
-  speed, without the slow-motion section. Keeping the slow-mo effect (rendering
-  Photos' time ramp) is a Stage 5 item.
+- **Slo-mo (120/240 fps) recordings:** the Photos picker hands over the
+  *rendered* slo-mo (30 fps, slowed section baked in, as Photos/Messages show
+  it). Verified on device 2026-11-15. No special handling is needed. The raw
+  high-frame-rate original would need Photos library permission
+  (`PHAssetResourceManager`); that's an optional later feature.
 
 The small presets use H.264 on purpose, because Messenger, email clients, and
 web uploaders handle it everywhere. Presets are a `Codable` struct, so user
@@ -274,6 +315,7 @@ paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |
 | **7. Polish** | Custom preset editor, saved presets, Share Extension ("Open in FootBrake" from Photos) | Manual |
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
+| **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |
 
 ## 7. Open questions
 

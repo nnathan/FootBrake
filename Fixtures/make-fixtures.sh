@@ -36,7 +36,8 @@ rm out/_portrait_tmp.mov
 
 # 5. Variable frame rate around 30 fps (every 7th frame delayed by 8 ms)
 $FF -f lavfi -i "$VIDEO" -f lavfi -i "$TONE" -t 10 \
-    -vf "setpts='N/(30*TB)+if(eq(mod(N,7),0),0.008/TB,0)'" -fps_mode passthrough \
+    -vf "settb=1/90000,setpts='N/(30*TB)+if(eq(mod(N\\,7)\\,6)\\,0.008/TB\\,0)'" \
+    -fps_mode passthrough -enc_time_base:v 1/90000 \
     -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p \
     -c:a aac -b:a 160k -ac 2 out/vfr_1080p30.mov
 
@@ -51,6 +52,14 @@ $FF -f lavfi -i "$VIDEO" -f lavfi -i "$TONE" -f lavfi -i "sine=frequency=880:sam
 $FF -f lavfi -i "testsrc2=size=1280x720:rate=24" -f lavfi -i "$TONE" -t 10 \
     -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p \
     -c:a aac -b:a 128k -ac 2 out/h264_720p24.mp4
+
+# 8. iPhone-style capture metadata (creation date, location, make/model),
+#    written by AVFoundation so it uses the same mdta keys as the camera
+$FF -f lavfi -i "$VIDEO" -f lavfi -i "$TONE" -t 5 \
+    -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p \
+    -c:a aac -b:a 160k -ac 2 out/_metadata_tmp.mov
+xcrun swift add-apple-metadata.swift out/_metadata_tmp.mov out/iphone_metadata.mov
+rm out/_metadata_tmp.mov
 
 echo "Fixtures written to $(pwd)/out:"
 for f in out/*; do

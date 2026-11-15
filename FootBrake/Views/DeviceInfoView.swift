@@ -1,9 +1,9 @@
 import FootBrakeCore
 import SwiftUI
 
-/// Stage 0 placeholder: proves the app, the Core package, and VideoToolbox
-/// all work on the device by listing the hardware encoders it reports.
-struct ContentView: View {
+/// App, device and VideoToolbox encoder details (the Stage 0 screen).
+struct DeviceInfoView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var capabilities: [EncoderCapability] = []
 
     var body: some View {
@@ -20,7 +20,13 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("FootBrake")
+            .navigationTitle("About This Device")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
             .task { capabilities = Capabilities.probe() }
         }
     }
@@ -70,5 +76,5 @@ private struct EncoderRow: View {
 }
 
 #Preview {
-    ContentView()
+    DeviceInfoView()
 }
