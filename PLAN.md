@@ -229,6 +229,11 @@ on older iOS.
 - Cinematic mode: the picker gives a rendered file (focus effect baked in, no
   depth track) tagged `com.apple.quicktime.cinematic-video`. Treat it as normal
   video.
+- Photos library (Stage 2): saving byte-identical video data twice creates two
+  items, but both show the **first** save's original filename. A repeat save
+  under a new name (FootBrake's button or the share sheet's Save Video)
+  therefore uses a fresh passthrough copy (new container
+  timestamps) first. Verified on device 2026-11-15.
 
 ## 4. Presets (inspired by `~/code/handbrake/preset/preset_builtin.json`)
 

@@ -1,3 +1,4 @@
+import CoreMedia
 import FootBrakeCore
 import Foundation
 
@@ -12,6 +13,8 @@ let usage = """
     commands:
       caps            print this machine's VideoToolbox encoder capabilities
       probe <file>... print media info for each file
+      copy <in> <out> --start <time> --end <time> [--exact]
+                      trim without re-encoding (default: start at previous keyframe)
     """
 
 func printCapabilities() {
@@ -65,6 +68,22 @@ case "probe" where arguments.count > 1:
         }
     }
     exit(failed ? 1 : 0)
+case "copy" where arguments.count >= 3:
+    func value(_ flag: String) -> Double? {
+        arguments.firstIndex(of: flag).flatMap { i in
+            i + 1 < arguments.count ? Format.parseDuration(arguments[i + 1]) : nil
+        }
+    }
+    let source = URL(fileURLWithPath: arguments[1]), output = URL(fileURLWithPath: arguments[2])
+    let info = try await MediaProbe.probe(source)
+    let start = value("--start") ?? 0, end = value("--end") ?? info.duration
+    let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 90_000),
+                            end: CMTime(seconds: end, preferredTimescale: 90_000))
+    let began = Date()
+    try await CopyExporter.export(source: source, range: range,
+                                  mode: arguments.contains("--exact") ? .exact : .keyframe, to: output)
+    let result = try await MediaProbe.probe(output)
+    print("wrote \(output.path): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
 default:
     print(usage)
     exit(CommandLine.arguments.count > 1 ? 64 : 0)

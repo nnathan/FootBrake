@@ -22,6 +22,22 @@ public enum Format {
             : String(format: "%d:%02d.%03d", m, s, ms)
     }
 
+    /// Parses `ss`, `ss.mmm`, `m:ss.mmm` or `h:mm:ss.mmm` into seconds.
+    public static func parseDuration(_ text: String) -> Double? {
+        let parts = text.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard (1...3).contains(parts.count) else { return nil }
+        var total = 0.0
+        for (i, part) in parts.enumerated() {
+            let isLast = i == parts.count - 1
+            guard let value = Double(part), value >= 0, !part.contains("-"),
+                  isLast || !part.contains("."),
+                  i == 0 || value < 60
+            else { return nil }
+            total = total * 60 + value
+        }
+        return total
+    }
+
     public static func frameRate(_ fps: Double) -> String {
         abs(fps - fps.rounded()) < 0.01 ? String(format: "%.0f fps", fps) : String(format: "%.2f fps", fps)
     }

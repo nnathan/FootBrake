@@ -1,72 +1,41 @@
-import AVKit
 import FootBrakeCore
 import SwiftUI
 
-/// Plays a source video and shows everything `MediaProbe` found out about it.
-struct SourceView: View {
-    let source: SourceVideo
-    @State private var player: AVPlayer
-
-    init(source: SourceVideo) {
-        self.source = source
-        _player = State(initialValue: AVPlayer(url: source.url))
-    }
-
-    private var info: MediaInfo { source.info }
+/// Everything `MediaProbe` found out about the source video.
+struct SourceInfoView: View {
+    let info: MediaInfo
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollViewReader { proxy in
-            list
-            #if DEBUG
-            // Simulator testing: `-FBScrollToBottom` shows the last sections.
-            .task {
-                if ProcessInfo.processInfo.arguments.contains("-FBScrollToBottom") {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                    proxy.scrollTo("bottom", anchor: .bottom)
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent("Format", value: Format.containerName(info.containerType))
+                    LabeledContent("Size", value: Format.bytes(info.fileSize))
+                    LabeledContent("Duration", value: Format.duration(info.duration))
+                    LabeledContent("Overall bitrate", value: Format.bitRate(info.overallBitRate))
+                } header: {
+                    badges
+                }
+
+                if let video = info.video {
+                    videoSection(video)
+                }
+
+                ForEach(Array(info.audio.enumerated()), id: \.offset) { index, audio in
+                    audioSection(audio, number: index + 1)
+                }
+
+                captureSection
+            }
+            .navigationTitle(info.fileName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
                 }
             }
-            #endif
         }
-        .navigationTitle(info.fileName)
-        .navigationBarTitleDisplayMode(.inline)
-        .onDisappear { player.pause() }
-    }
-
-    private var list: some View {
-        List {
-            Section {
-                VideoPlayer(player: player)
-                    .aspectRatio(playerAspectRatio, contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: 440)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.black)
-            } footer: {
-                badges
-            }
-
-            Section("File") {
-                LabeledContent("Format", value: Format.containerName(info.containerType))
-                LabeledContent("Size", value: Format.bytes(info.fileSize))
-                LabeledContent("Duration", value: Format.duration(info.duration))
-                LabeledContent("Overall bitrate", value: Format.bitRate(info.overallBitRate))
-            }
-
-            if let video = info.video {
-                videoSection(video)
-            }
-
-            ForEach(Array(info.audio.enumerated()), id: \.offset) { index, audio in
-                audioSection(audio, number: index + 1)
-            }
-
-            captureSection
-            Color.clear.frame(height: 0).listRowBackground(Color.clear).id("bottom")
-        }
-    }
-
-    private var playerAspectRatio: CGFloat {
-        guard let size = info.video?.displaySize, size.height > 0 else { return 16 / 9 }
-        return size.width / size.height
     }
 
     // MARK: - Sections
@@ -138,7 +107,8 @@ struct SourceView: View {
                         .foregroundStyle(.tint)
                 }
             }
-            .padding(.top, 8)
+            .textCase(nil)
+            .padding(.bottom, 8)
         }
     }
 

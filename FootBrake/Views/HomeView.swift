@@ -66,7 +66,7 @@ struct HomeView: View {
                 }
             }
             .navigationDestination(for: SourceVideo.self) { source in
-                SourceView(source: source)
+                EditorView(source: source)
             }
             .overlay {
                 if isImporting { importOverlay }
