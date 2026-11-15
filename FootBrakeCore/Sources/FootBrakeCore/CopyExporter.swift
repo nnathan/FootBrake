@@ -72,9 +72,18 @@ public enum CopyExporter {
         source: URL,
         range: CMTimeRange,
         mode: CopyCutMode,
+        metadata edits: MetadataEdits = .none,
         to output: URL,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
+        // Apple's export session copies lens details and timed camera tracks
+        // it can't edit, so removing data goes through FootBrake's own
+        // lossless remux instead (same samples, camera data left out).
+        if edits.dropsCameraData {
+            try await AudioReencoder.export(source: source, range: range, mode: mode, audioBitRate: nil,
+                                            metadata: edits, to: output, progress: progress)
+            return
+        }
         let asset = AVURLAsset(url: source)
         guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough) else {
             throw CopyExportError.cannotCreateSession
@@ -88,7 +97,7 @@ public enum CopyExporter {
             timeRange = CMTimeRange(start: start, end: range.end)
         }
         session.timeRange = timeRange
-        session.metadata = try await asset.load(.metadata)
+        session.metadata = edits.apply(to: try await asset.load(.metadata))
         session.shouldOptimizeForNetworkUse = true
         try? FileManager.default.removeItem(at: output)
 

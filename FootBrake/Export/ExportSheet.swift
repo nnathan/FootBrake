@@ -289,7 +289,7 @@ struct ExportSheet: View {
         do {
             let file = photosCopyName == nil ? url : try await job.distinctCopy()
             defer { if file != url { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) } }
-            try await PhotoLibrarySaver.save(file, capture: job.source.info.metadata)
+            try await PhotoLibrarySaver.save(file, capture: job.metadata.apply(to: job.source.info.metadata))
             record("Saved to Photos", icon: "photo.on.rectangle", url: url)
         } catch {
             saveError = error.localizedDescription

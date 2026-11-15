@@ -138,7 +138,7 @@ final class TranscodeJob: @unchecked Sendable {
         try? FileManager.default.removeItem(at: output)
         writer = try AVAssetWriter(outputURL: output, fileType: plan.settings.container == .mov ? .mov : .mp4)
         writer.shouldOptimizeForNetworkUse = true
-        writer.metadata = Self.captureMetadata(try await asset.load(.metadata))
+        writer.metadata = plan.settings.metadata.apply(to: Self.captureMetadata(try await asset.load(.metadata)))
 
         var hint: CMVideoFormatDescription?
         CMVideoFormatDescriptionCreate(allocator: nil, codecType: plan.settings.codec.codecType,

@@ -11,6 +11,14 @@ struct EditorView: View {
     @AppStorage("exportCodec") private var codec: VideoCodec = .hevc
     @AppStorage("exportFrameRate") private var frameRateCap = 30
     @AppStorage("exportKeepHDR") private var keepHDR = true
+    // Metadata: the removal toggles are remembered; the date choice is per video.
+    @AppStorage("metadataRemoveLocation") private var removeLocation = false
+    @AppStorage("metadataRemoveDevice") private var removeDeviceInfo = false
+    @State private var dateChoice = DateChoice.original
+    @State private var customDate = Date()
+
+    enum DateChoice: Hashable { case original, custom, remove }
+
     /// Audio picker value (0 = keep), remembered per preset in UserDefaults.
     @State private var audioKbps = 0
 
@@ -40,6 +48,8 @@ struct EditorView: View {
             Form {
                 selectionSection
                 exportSection
+                metadataSection
+                exportButtonSection
             }
         }
         .navigationTitle(info.fileName)
@@ -160,9 +170,17 @@ struct EditorView: View {
                 transcodeOptions
             }
             audioOptions
+        } header: {
+            Text("Export")
+        } footer: {
+            Text(footerText)
+        }
+    }
 
+    private var exportButtonSection: some View {
+        Section {
             Button {
-                let job = ExportJob(source: model.source)
+                let job = ExportJob(source: model.source, metadata: metadataEdits)
                 switch (preset, audioKbps) {
                 case (.copy, 0):
                     job.startCopy(range: model.selectionRange, mode: model.cutMode, wholeFile: model.isWholeFile)
@@ -176,10 +194,74 @@ struct EditorView: View {
             } label: {
                 Text("Export").frame(maxWidth: .infinity).bold()
             }
+        }
+    }
+
+    // MARK: - Metadata
+
+    private var capture: CaptureMetadata { info.metadata }
+    private var hasDeviceInfo: Bool { capture.make != nil || capture.model != nil || capture.software != nil }
+
+    private var metadataEdits: MetadataEdits {
+        let date: DateEdit = switch dateChoice {
+        case .original: .original
+        case .custom: .custom(customDate)
+        case .remove: .remove
+        }
+        return MetadataEdits(removeLocation: removeLocation && capture.location != nil,
+                             removeDeviceInfo: removeDeviceInfo && hasDeviceInfo, date: date)
+    }
+
+    private var metadataSection: some View {
+        Section {
+            if let location = capture.location {
+                Toggle(isOn: $removeLocation) {
+                    detailLabel("Remove location", detail: Format.coordinate(location))
+                }
+            }
+            if hasDeviceInfo {
+                Toggle(isOn: $removeDeviceInfo) {
+                    detailLabel("Remove device info", detail: deviceDescription)
+                }
+            }
+            Picker("Recording date", selection: $dateChoice) {
+                Text("Original").tag(DateChoice.original)
+                Text("Custom").tag(DateChoice.custom)
+                Text("Remove").tag(DateChoice.remove)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: dateChoice) { choice in
+                if choice == .custom { customDate = capture.creationDate ?? Date() }
+            }
+            switch dateChoice {
+            case .original:
+                LabeledContent("Recorded", value: capture.creationDate
+                    .map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Not in file")
+            case .custom:
+                DatePicker("Recorded", selection: $customDate)
+            case .remove:
+                Text("Photos will show it as taken when you save it. The file still notes when it was exported, but not when it was recorded.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
-            Text("Export")
+            Text("Metadata")
         } footer: {
-            Text(footerText)
+            Text("Lens details and camera data such as detected faces are never included in re-encoded videos, "
+                 + "and are left out of copies when you remove anything. Save to Photos follows these choices.")
+        }
+    }
+
+    private var deviceDescription: String {
+        let device = [capture.make, capture.model].compactMap { $0 }.joined(separator: " ")
+        return [device.isEmpty ? nil : device, capture.software.map { "iOS \($0)" }]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private func detailLabel(_ title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+            Text(detail).font(.caption).foregroundStyle(.secondary)
         }
     }
 

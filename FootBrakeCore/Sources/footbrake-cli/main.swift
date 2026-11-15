@@ -5,6 +5,21 @@ import Foundation
 // macOS test harness for FootBrakeCore. Runs the same engine code as the iOS
 // app so it can be exercised against fixture clips without a device.
 
+/// --no-location, --no-device, --date <ISO 8601 | remove>
+func metadataEdits(_ arguments: [String]) -> MetadataEdits {
+    var edits = MetadataEdits(removeLocation: arguments.contains("--no-location"),
+                              removeDeviceInfo: arguments.contains("--no-device"))
+    if let i = arguments.firstIndex(of: "--date"), i + 1 < arguments.count {
+        let value = arguments[i + 1]
+        if value == "remove" {
+            edits.date = .remove
+        } else if let date = ISO8601DateFormatter().date(from: value) {
+            edits.date = .custom(date)
+        }
+    }
+    return edits
+}
+
 let usage = """
     footbrake-cli \(FootBrakeCore.version)
 
@@ -13,6 +28,10 @@ let usage = """
     commands:
       caps            print this machine's VideoToolbox encoder capabilities
       probe <file>... print media info for each file
+
+    copy, shrink-audio and transcode also take:
+      --no-location --no-device --date <2026-01-02T03:04:05+11:00 | remove>
+
       copy <in> <out> --start <time> --end <time> [--exact]
                       trim without re-encoding (default: start at previous keyframe)
       shrink-audio <in> <out> [--kbps <n>] [--start <time>] [--end <time>] [--exact]
@@ -87,7 +106,8 @@ case "copy" where arguments.count >= 3:
                             end: CMTime(seconds: end, preferredTimescale: 90_000))
     let began = Date()
     try await CopyExporter.export(source: source, range: range,
-                                  mode: arguments.contains("--exact") ? .exact : .keyframe, to: output)
+                                  mode: arguments.contains("--exact") ? .exact : .keyframe,
+                                  metadata: metadataEdits(arguments), to: output)
     let result = try await MediaProbe.probe(output)
     print("wrote \(output.path): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
 case "shrink-audio" where arguments.count >= 3:
@@ -103,7 +123,8 @@ case "shrink-audio" where arguments.count >= 3:
     let began = Date()
     try await AudioReencoder.export(source: source, range: range,
                                     mode: arguments.contains("--exact") ? .exact : .keyframe,
-                                    audioBitRate: (value("--kbps").flatMap(Int.init) ?? 96) * 1000, to: output)
+                                    audioBitRate: (value("--kbps").flatMap(Int.init) ?? 96) * 1000,
+                                    metadata: metadataEdits(arguments), to: output)
     let result = try await MediaProbe.probe(output)
     print("wrote \(output.lastPathComponent): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
 case "transcode" where arguments.count >= 3:
@@ -117,6 +138,7 @@ case "transcode" where arguments.count >= 3:
     settings.frameRateCap = option("--fps").flatMap(Int.init) ?? 30
     settings.keepHDR = !arguments.contains("--sdr")
     settings.forceSoftwareEncoder = arguments.contains("--software")
+    settings.metadata = metadataEdits(arguments)
     settings.container = output.pathExtension.lowercased() == "mov" ? .mov : .mp4
     if let kbps = option("--audio").flatMap(Int.init) { settings.audio = AudioPlan(kbps: kbps) }   // 0 = keep
     if let v = option("--vbr").flatMap(Int.init) { settings.rateControl = .variableBitRate(v * 1000) }

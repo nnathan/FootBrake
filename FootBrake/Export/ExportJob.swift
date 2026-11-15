@@ -72,6 +72,8 @@ final class ExportJob: ObservableObject, Identifiable {
 
     let id = UUID()
     let source: SourceVideo
+    /// Metadata choices for this export; Save to Photos follows them too.
+    let metadata: MetadataEdits
     @Published private(set) var state: State = .running(progress: 0)
     /// e.g. "Encoded with hardware HEVC", for re-encodes.
     @Published private(set) var encoderNote: String?
@@ -81,8 +83,9 @@ final class ExportJob: ObservableObject, Identifiable {
     private var wentToBackground = false
     private var backgroundObserver: AnyCancellable?
 
-    init(source: SourceVideo) {
+    init(source: SourceVideo, metadata: MetadataEdits = .none) {
         self.source = source
+        self.metadata = metadata
         // iOS stops the hardware encoder when the app leaves the screen; note
         // it so a resulting failure can be explained.
         backgroundObserver = NotificationCenter.default
@@ -102,23 +105,27 @@ final class ExportJob: ObservableObject, Identifiable {
 
     func startCopy(range: CMTimeRange, mode: CopyCutMode, wholeFile: Bool) {
         activity = "Copying…"
+        let metadata = metadata
         run(suffix: wholeFile ? "copy" : "trimmed", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
-            try await CopyExporter.export(source: source, range: range, mode: mode, to: output, progress: progress)
+            try await CopyExporter.export(source: source, range: range, mode: mode, metadata: metadata,
+                                          to: output, progress: progress)
             return nil
         }
     }
 
     func startShrinkAudio(range: CMTimeRange, mode: CopyCutMode, audioBitRate: Int) {
         activity = "Shrinking audio…"
+        let metadata = metadata
         run(suffix: "smaller audio", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
-            try await AudioReencoder.export(source: source, range: range, mode: mode,
-                                            audioBitRate: audioBitRate, to: output, progress: progress)
+            try await AudioReencoder.export(source: source, range: range, mode: mode, audioBitRate: audioBitRate,
+                                            metadata: metadata, to: output, progress: progress)
             return nil
         }
     }
 
     func startTranscode(range: CMTimeRange, settings: TranscodeSettings, suffix: String) {
         activity = "Encoding…"
+        let settings = { var s = settings; s.metadata = metadata; return s }()
         run(suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4) { source, output, progress in
             let result = try await Transcoder.transcode(source: source, range: range, settings: settings,
                                                         to: output, progress: progress)

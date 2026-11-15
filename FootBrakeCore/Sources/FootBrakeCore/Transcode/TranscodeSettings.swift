@@ -58,6 +58,8 @@ public struct TranscodeSettings: Sendable, Equatable, Codable {
     public var keepHDR: Bool
     public var audio: AudioPlan
     public var container: OutputContainer
+    /// Remove location / device info, or change the recording date.
+    public var metadata: MetadataEdits = .none
     /// Testing only: false forces Apple's software encoder (iOS 17.4+/macOS),
     /// to exercise the slow path on hardware that would never use it.
     public var forceSoftwareEncoder = false

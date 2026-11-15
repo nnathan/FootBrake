@@ -1,15 +1,19 @@
 import AVFoundation
 
-/// Backs the Copy preset when an audio bitrate (rather than Keep) is chosen:
-/// copies the video track sample-for-sample (full sharpness, HDR, rotation
-/// flag) and re-encodes only the main audio track to stereo AAC. Ideal for
-/// lectures and screen recordings, where the audio is often most of the file.
+/// FootBrake's own lossless remux, behind the Copy preset when Apple's export
+/// session won't do:
+/// - an audio bitrate is chosen: the video is copied sample-for-sample (full
+///   sharpness, HDR, rotation flag) and only the main audio track is
+///   re-encoded to stereo AAC. Ideal for lectures and screen recordings.
+/// - metadata is being removed (`audioBitRate` nil): video and every audio
+///   track are copied, while lens details and timed camera tracks are left out.
 public enum AudioReencoder {
     public static func export(
         source: URL,
         range: CMTimeRange,
         mode: CopyCutMode,
-        audioBitRate: Int,
+        audioBitRate: Int?,
+        metadata edits: MetadataEdits = .none,
         to output: URL,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
@@ -19,7 +23,8 @@ public enum AudioReencoder {
             trimmed = CMTimeRange(start: start, end: range.end)
         }
         let job = try await AudioReencodeJob(source: source, range: trimmed, audioBitRate: audioBitRate,
-                                             fileType: CopyExporter.fileType(for: source), output: output)
+                                             edits: edits, fileType: CopyExporter.fileType(for: source),
+                                             output: output)
         try await withTaskCancellationHandler {
             try await job.run(progress: progress)
         } onCancel: {
@@ -33,15 +38,15 @@ final class AudioReencodeJob: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let videoOutput: AVAssetReaderTrackOutput
     private let videoInput: AVAssetWriterInput
-    private let audioOutput: AVAssetReaderTrackOutput?
-    private let audioInput: AVAssetWriterInput?
+    private let audio: [(output: AVAssetReaderTrackOutput, input: AVAssetWriterInput)]
     private let range: CMTimeRange
 
     private let lock = NSLock()
     private var cancelled = false
     private var readerStarted = false
 
-    init(source: URL, range: CMTimeRange, audioBitRate: Int, fileType: AVFileType, output: URL) async throws {
+    init(source: URL, range: CMTimeRange, audioBitRate: Int?, edits: MetadataEdits,
+         fileType: AVFileType, output: URL) async throws {
         self.range = range
         let asset = AVURLAsset(url: source)
         let info = try await MediaProbe.probe(source)
@@ -54,10 +59,7 @@ final class AudioReencodeJob: @unchecked Sendable {
         try? FileManager.default.removeItem(at: output)
         writer = try AVAssetWriter(outputURL: output, fileType: fileType)
         writer.shouldOptimizeForNetworkUse = true
-        writer.metadata = try await asset.load(.metadata).filter {
-            [.quickTimeMetadataCreationDate, .quickTimeMetadataLocationISO6709, .quickTimeMetadataMake,
-             .quickTimeMetadataModel, .quickTimeMetadataSoftware].contains($0.identifier)
-        }
+        writer.metadata = edits.apply(to: try await asset.load(.metadata))
 
         // Video: compressed samples straight through, rotation flag kept.
         videoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: nil)
@@ -69,35 +71,44 @@ final class AudioReencodeJob: @unchecked Sendable {
         videoInput.expectsMediaDataInRealTime = false
         writer.add(videoInput)
 
-        // Audio: the main stereo track (AAC rather than APAC) → stereo AAC.
         let tracks = try await asset.loadTracks(withMediaType: .audio)
         let pairs = Array(zip(tracks, info.audio))
-        if let (track, audio) = pairs.first(where: { $0.1.codecFourCC == "aac " })
-            ?? pairs.first(where: { $0.1.codecFourCC != "apac" }) ?? pairs.first {
-            let channels = min(2, max(1, audio.channels))
-            let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-                AVFormatIDKey: kAudioFormatLinearPCM,
-                AVLinearPCMBitDepthKey: 32,
-                AVLinearPCMIsFloatKey: true,
-                AVLinearPCMIsNonInterleaved: false,
-                AVNumberOfChannelsKey: channels,
-            ])
+        var audio: [(AVAssetReaderTrackOutput, AVAssetWriterInput)] = []
+        if let audioBitRate {
+            // The main stereo track (AAC rather than APAC) → stereo AAC.
+            if let (track, info) = pairs.first(where: { $0.1.codecFourCC == "aac " })
+                ?? pairs.first(where: { $0.1.codecFourCC != "apac" }) ?? pairs.first {
+                let channels = min(2, max(1, info.channels))
+                let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVLinearPCMBitDepthKey: 32,
+                    AVLinearPCMIsFloatKey: true,
+                    AVLinearPCMIsNonInterleaved: false,
+                    AVNumberOfChannelsKey: channels,
+                ])
+                let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVNumberOfChannelsKey: channels,
+                    AVSampleRateKey: info.sampleRate > 0 ? min(info.sampleRate, 48_000) : 48_000,
+                    AVEncoderBitRateKey: audioBitRate,
+                ])
+                audio.append((output, input))
+            }
+        } else {
+            // Every audio track (including spatial audio) copied as-is.
+            for track in tracks {
+                let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+                let hint = try await track.load(.formatDescriptions).first
+                audio.append((output, AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: hint)))
+            }
+        }
+        for (output, input) in audio {
             output.alwaysCopiesSampleData = false
             reader.add(output)
-            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVNumberOfChannelsKey: channels,
-                AVSampleRateKey: audio.sampleRate > 0 ? min(audio.sampleRate, 48_000) : 48_000,
-                AVEncoderBitRateKey: audioBitRate,
-            ])
             input.expectsMediaDataInRealTime = false
             writer.add(input)
-            audioOutput = output
-            audioInput = input
-        } else {
-            audioOutput = nil
-            audioInput = nil
         }
+        self.audio = audio
     }
 
     func run(progress: @escaping @Sendable (Double) -> Void) async throws {
@@ -115,7 +126,12 @@ final class AudioReencodeJob: @unchecked Sendable {
         async let video: Void = pump(videoInput, videoOutput, queue: "video") { [range] time in
             if total > 0 { progress(min(max((time - range.start).seconds / total, 0), 0.99)) }
         }
-        async let audio: Void = pump(audioInput, audioOutput, queue: "audio", onSample: nil)
+        async let audio: Void = withTaskGroup(of: Void.self) { group in
+            for (index, pair) in self.audio.enumerated() {
+                nonisolated(unsafe) let pair = pair
+                group.addTask { await self.pump(pair.input, pair.output, queue: "audio\(index)", onSample: nil) }
+            }
+        }
         _ = await (video, audio)
 
         if lock.withLock({ cancelled }) {
