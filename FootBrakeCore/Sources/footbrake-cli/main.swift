@@ -38,7 +38,7 @@ let usage = """
                       copy video untouched, re-encode audio to AAC (default 96 kbps)
       transcode <in> <out> [--codec hevc|h264] [--short <px>] [--fps 30|60]
                 [--vbr <kbps> | --abr <kbps> | --cq <0-1> | --qp <0-1>] [--sdr]
-                [--start <time>] [--end <time>] [--audio <kbps>|0 to keep] [--software]
+                [--start <time>] [--end <time>] [--audio <kbps>|0 to keep] [--software] [--fit <MB>]
                       re-encode with the hardware encoder
     """
 
@@ -139,6 +139,7 @@ case "transcode" where arguments.count >= 3:
     settings.keepHDR = !arguments.contains("--sdr")
     settings.forceSoftwareEncoder = arguments.contains("--software")
     settings.metadata = metadataEdits(arguments)
+    if let mb = option("--fit").flatMap(Double.init) { settings.targetFileSize = Int64(mb * 1_000_000) }
     settings.container = output.pathExtension.lowercased() == "mov" ? .mov : .mp4
     if let kbps = option("--audio").flatMap(Int.init) { settings.audio = AudioPlan(kbps: kbps) }   // 0 = keep
     if let v = option("--vbr").flatMap(Int.init) { settings.rateControl = .variableBitRate(v * 1000) }
@@ -159,7 +160,7 @@ case "transcode" where arguments.count >= 3:
     print("""
         wrote \(output.lastPathComponent): \(Int(plan.outputSize.width))x\(Int(plan.outputSize.height)) \(plan.hdr.rawValue), \
         \(result.usedHardwareEncoder == false ? "software" : "hardware") \(result.rateControl.label), \(Format.duration(out.duration)), \(Format.bytes(out.fileSize)) \
-        (video \(Format.bitRate(out.video?.bitRate ?? 0))), frames \(result.framesEncoded)/\(result.framesRead), \
+        (video \(Format.bitRate(out.video?.bitRate ?? 0))), \(result.attempts) pass(es), frames \(result.framesEncoded)/\(result.framesRead), \
         \(String(format: "%.2f", result.seconds))s
         """)
 default:

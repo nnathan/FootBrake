@@ -303,7 +303,14 @@ struct EditorView: View {
         if sourceIsHDR && codec == .hevc {
             Toggle("Keep HDR", isOn: $keepHDR)
         }
-        LabeledContent("Output", value: outputDescription(model.plan(for: transcodeSettings)))
+        let plan = model.plan(for: transcodeSettings)
+        LabeledContent("Output", value: outputDescription(plan))
+        if plan.isStarved {
+            Label("Too long to look good at this size. Trim it, or use a bigger limit.",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+        }
         if !model.isHardware(codec) {
             Label("Software encoding: much slower and uses more battery", systemImage: "exclamationmark.triangle.fill")
                 .font(.callout)
@@ -324,7 +331,11 @@ struct EditorView: View {
         if let audio = mainAudio {
             LabeledContent("Audio now", value: "\(audio.codecName) \(audio.channelLayoutName), \(Format.bitRate(audio.bitRate))")
         }
-        LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize))")
+        if let limit = preset.targetFileSize, preset != .copy {
+            LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize)) (limit \(Format.bytes(limit)))")
+        } else {
+            LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize))")
+        }
     }
 
     private var estimatedSize: Int64 {
@@ -380,6 +391,10 @@ struct EditorView: View {
                 notes.append(model.isHardware(other)
                     ? "This iPhone has no hardware encoder for \(codec.displayName); \(other.displayName) would be much faster."
                     : "This iPhone has no hardware video encoder available, so exports will be slow.")
+            }
+            if let limit = preset.targetFileSize {
+                notes.append("The size is chosen from the length so the file stays under \(Format.bytes(limit)); "
+                    + "if it comes out over, FootBrake re-encodes once at a lower bitrate.")
             }
             if sourceIsHDR && (codec == .h264 || !keepHDR) {
                 notes.append("HDR will be converted to standard range, so it looks right on any screen.")

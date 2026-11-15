@@ -34,6 +34,9 @@ public struct TranscodeResult: Sendable {
     public var framesRead: Int
     public var framesEncoded: Int
     public var seconds: Double
+    /// Encodes it took: 2 when a size-targeted first pass came out over.
+    public var attempts: Int
+    public var fileSize: Int64
 }
 
 /// Re-encodes a video with the hardware encoder:
@@ -53,18 +56,33 @@ public enum Transcoder {
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws -> TranscodeResult {
         let info = try await MediaProbe.probe(source)
-        let plan = TranscodePlan(source: info, settings: settings, device: Capabilities.probe())
-        let job = try await TranscodeJob(source: source, info: info, range: range, plan: plan, output: output)
+        let duration = range?.duration.seconds ?? info.duration
+        var plan = TranscodePlan(source: info, settings: settings, duration: duration, device: Capabilities.probe())
         let began = Date()
-        try await withTaskCancellationHandler {
-            try await job.run(progress: progress)
-        } onCancel: {
-            job.cancel()
+
+        for attempt in 1... {
+            let job = try await TranscodeJob(source: source, info: info, range: range, plan: plan, output: output)
+            try await withTaskCancellationHandler {
+                try await job.run(progress: progress)
+            } onCancel: {
+                job.cancel()
+            }
+            let size = (try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+
+            // Size-targeted: if the first pass overshot, take the excess out of
+            // the video bitrate (plus a 3% margin) and encode once more.
+            if let target = settings.targetFileSize, size > target, attempt == 1,
+               case .averageBitRate(let bps) = plan.rateControl {
+                let excess = Double(size) - Double(target) * 0.97
+                plan.rateControl = .averageBitRate(max(Int(Double(bps) - excess * 8 / max(duration, 0.1)), 50_000))
+                continue
+            }
+            return TranscodeResult(output: output, plan: plan, rateControl: job.appliedRateControl,
+                                   usedHardwareEncoder: job.usedHardwareEncoder,
+                                   framesRead: job.framesRead, framesEncoded: job.framesEncoded,
+                                   seconds: Date().timeIntervalSince(began), attempts: attempt, fileSize: size)
         }
-        return TranscodeResult(output: output, plan: plan, rateControl: job.appliedRateControl,
-                               usedHardwareEncoder: job.usedHardwareEncoder,
-                               framesRead: job.framesRead, framesEncoded: job.framesEncoded,
-                               seconds: Date().timeIntervalSince(began))
+        fatalError("unreachable")
     }
 }
 

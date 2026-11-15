@@ -75,6 +75,8 @@ final class ExportJob: ObservableObject, Identifiable {
     /// Metadata choices for this export; Save to Photos follows them too.
     let metadata: MetadataEdits
     @Published private(set) var state: State = .running(progress: 0)
+    /// Size limit of a "Fit in" export, to show whether it fits.
+    private(set) var targetFileSize: Int64?
     /// e.g. "Encoded with hardware HEVC", for re-encodes.
     @Published private(set) var encoderNote: String?
     private var task: Task<Void, Never>?
@@ -125,6 +127,7 @@ final class ExportJob: ObservableObject, Identifiable {
 
     func startTranscode(range: CMTimeRange, settings: TranscodeSettings, suffix: String) {
         activity = "Encoding…"
+        targetFileSize = settings.targetFileSize
         let settings = { var s = settings; s.metadata = metadata; return s }()
         run(suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4) { source, output, progress in
             let result = try await Transcoder.transcode(source: source, range: range, settings: settings,

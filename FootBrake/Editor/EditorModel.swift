@@ -91,7 +91,7 @@ final class EditorModel: ObservableObject {
     }
 
     func plan(for settings: TranscodeSettings) -> TranscodePlan {
-        TranscodePlan(source: source.info, settings: settings, device: capabilities)
+        TranscodePlan(source: source.info, settings: settings, duration: selectionDuration, device: capabilities)
     }
 
     /// Bitrate budget × selection length. Encoders land near, not exactly on, the target.
@@ -100,12 +100,7 @@ final class EditorModel: ObservableObject {
         case .averageBitRate(let bps), .variableBitRate(let bps): bps
         case .constantQuality, .fixedQuality: Int(source.info.video?.bitRate ?? 0)
         }
-        let sourceAudio = source.info.audio.first { $0.codecFourCC == "aac " } ?? source.info.audio.first
-        let audioBps: Int = switch plan.settings.audio {
-        case .aac(let bps): min(bps, Int(sourceAudio?.bitRate ?? Double(bps)))
-        case .keep: Int(sourceAudio?.bitRate ?? 160_000)
-        case .none: 0
-        }
+        let audioBps = TranscodePlan.audioBitRate(plan.settings.audio, source: source.info)
         return Int64(Double(videoBps + audioBps) * selectionDuration / 8)
     }
 

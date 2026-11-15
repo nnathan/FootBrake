@@ -186,6 +186,9 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
   vs ABR 5.7 and 3.8 Mbps looked practically the same, so **ABR is the
   default**. Every encode took ≈19.5 s for 60 s of 4K60, limited by
   decoding the source, not by encoding.
+- **Deferred pending user feedback:** a size-based bitrate retune (≈0.8× at
+  ≥1080, 1.0× at 720, 1.3× at 480). On-device VMAF at the current 1×: HEVC
+  1080 99.4, 720 97.6, **480 93.3** (the soft spot); H.264 99.6 / 98.5 / 95.8.
 - Bitrate targets come from bits-per-pixel: `bps = width × height × fps × bpp`,
   starting at `bpp ≈ 0.10` (H.264) and `≈ 0.06` (HEVC). 60 fps uses about ×1.5,
   not ×2. We cap at the source bitrate, because re-encoding should never grow

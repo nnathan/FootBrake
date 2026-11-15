@@ -116,6 +116,14 @@ struct ExportSheet: View {
                 Text("Done in \(String(format: "%.1f", seconds)) s · was \(Format.bytes(job.source.info.fileSize))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let limit = job.targetFileSize {
+                    let fits = info.fileSize <= limit
+                    Label(fits ? "Fits in \(Format.bytes(limit))"
+                               : "\(Format.bytes(info.fileSize)): slightly over the \(Format.bytes(limit)) limit",
+                          systemImage: fits ? "checkmark.seal" : "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(fits ? Color.green : Color.orange)
+                }
                 if let note = job.encoderNote {
                     Label(note, systemImage: note.hasPrefix("Encoded with hardware") ? "cpu" : "exclamationmark.triangle.fill")
                         .font(.caption)

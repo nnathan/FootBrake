@@ -60,6 +60,9 @@ public struct TranscodeSettings: Sendable, Equatable, Codable {
     public var container: OutputContainer
     /// Remove location / device info, or change the recording date.
     public var metadata: MetadataEdits = .none
+    /// Fit the output under this many bytes (decimal MB presets). Overrides
+    /// `maxShortSide` and `rateControl`: both are derived from the budget.
+    public var targetFileSize: Int64?
     /// Testing only: false forces Apple's software encoder (iOS 17.4+/macOS),
     /// to exercise the slow path on hardware that would never use it.
     public var forceSoftwareEncoder = false
@@ -89,6 +92,9 @@ public struct TranscodePlan: Sendable, Equatable {
     public var settings: TranscodeSettings
 
     public var is10Bit: Bool { hdr.isHDR }
+    /// For size-targeted plans: the video gets too few bits to look good even
+    /// at the smallest size (suggest a bigger limit or a shorter selection).
+    public var isStarved = false
 
     /// Bits per pixel per frame used to pick a default bitrate. Starting points
     /// to be tuned by measurement (PLAN.md §3c).
@@ -99,7 +105,10 @@ public struct TranscodePlan: Sendable, Equatable {
         }
     }
 
-    public init(source: MediaInfo, settings: TranscodeSettings, device: [EncoderCapability] = []) {
+    /// `duration` is the length being exported (the trimmed selection);
+    /// defaults to the whole source.
+    public init(source: MediaInfo, settings: TranscodeSettings, duration: Double? = nil,
+                device: [EncoderCapability] = []) {
         self.settings = settings
         let video = source.video
         let display = video?.displaySize ?? CGSize(width: 1920, height: 1080)
@@ -117,11 +126,61 @@ public struct TranscodePlan: Sendable, Equatable {
             hdr = .sdr
         }
 
+        if let target = settings.targetFileSize {
+            let fit = Self.fit(target: target, duration: duration ?? source.duration, display: display,
+                               frameRate: frameRate, codec: settings.codec,
+                               audioBitRate: Self.audioBitRate(settings.audio, source: source),
+                               sourceBitRate: video?.bitRate ?? 0)
+            outputSize = fit.size
+            rateControl = .averageBitRate(fit.videoBitRate)
+            isStarved = fit.starved
+            return
+        }
+
         // ABR by default: on iPhone (iOS 26) the HEVC encoder ignores the VBR
         // target, while ABR lands within ~5% and looked the same (PLAN.md §3c).
         rateControl = settings.rateControl ?? .averageBitRate(Self.defaultBitRate(
             codec: settings.codec, size: outputSize, frameRate: frameRate,
             sourceBitRate: video?.bitRate ?? 0))
+    }
+
+    /// Short sides tried for size-targeted output, largest first.
+    static let fitSizes = [1080, 720, 540, 360, 240]
+
+    /// Size-targeted output aims for at least this share of the normal
+    /// presets' bits per pixel before dropping to a smaller size.
+    static let fitMinimumDensity = 0.6
+
+    /// Below this share even the smallest size looks poor.
+    static let fitStarvedDensity = 0.25
+
+    /// Budget → video bitrate, then the largest standard size that still gets
+    /// enough bits per pixel. 5% of the budget covers container overhead.
+    static func fit(target: Int64, duration: Double, display: CGSize, frameRate: Double, codec: VideoCodec,
+                    audioBitRate: Int, sourceBitRate: Double) -> (size: CGSize, videoBitRate: Int, starved: Bool) {
+        let total = Double(target) * 8 * 0.95 / max(duration, 0.1)
+        var video = max(total - Double(audioBitRate), 50_000)
+        if sourceBitRate > 0 { video = min(video, sourceBitRate * 0.9) }
+        let effectiveFPS = frameRate <= 30 ? frameRate : 30 + (frameRate - 30) * 0.5
+        func density(_ size: CGSize) -> Double {
+            video / (Double(size.width * size.height) * effectiveFPS * bitsPerPixel(codec))
+        }
+
+        let sourceShort = Int(min(display.width, display.height))
+        let candidates = ([sourceShort] + fitSizes.filter { $0 < sourceShort })
+            .map { outputSize(display: display, maxShortSide: $0) }
+        let size = candidates.first { density($0) >= fitMinimumDensity } ?? candidates.last ?? display
+        return (size, Int(video), density(size) < fitStarvedDensity)
+    }
+
+    /// Audio bits per second this plan will spend (for size budgets and estimates).
+    public static func audioBitRate(_ plan: AudioPlan, source: MediaInfo) -> Int {
+        let main = source.audio.first { $0.codecFourCC == "aac " } ?? source.audio.first
+        switch plan {
+        case .aac(let bps): return main.map { min(bps, Int($0.bitRate)) } ?? bps
+        case .keep: return Int(main?.bitRate ?? 160_000)
+        case .none: return 0
+        }
     }
 
     /// Short side scaled down to `maxShortSide` (never up), aspect kept, even dimensions.
