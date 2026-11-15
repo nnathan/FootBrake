@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0524A"/>
+      <stop offset="1" stop-color="#A3161F"/>
+    </linearGradient>
+    <linearGradient id="shoe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F1DEDC"/>
+    </linearGradient>
+  </defs>
+  <!-- Full-bleed square; iOS applies the rounded mask. -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Drawn level, then tilted so the foot presses down and forward. -->
+  <g transform="translate(-55 -95) scale(1.12) rotate(-22 512 560)">
+    <!-- Pedal arm up to its pivot. -->
+    <rect x="726" y="230" width="58" height="470" rx="29" fill="#FFFFFF" opacity="0.9"/>
+    <circle cx="755" cy="250" r="44" fill="#FFFFFF" opacity="0.9"/>
+    <!-- Pedal pad with film-strip grip slots. -->
+    <rect x="410" y="690" width="430" height="150" rx="42" fill="#FFFFFF"/>
+    <g fill="#B91C24">
+      <rect x="455" y="735" width="50" height="60" rx="13"/>
+      <rect x="530" y="735" width="50" height="60" rx="13"/>
+      <rect x="605" y="735" width="50" height="60" rx="13"/>
+      <rect x="680" y="735" width="50" height="60" rx="13"/>
+      <rect x="755" y="735" width="50" height="60" rx="13"/>
+    </g>
+
+    <!-- Shoe: sole resting on the pad, ball of the foot over it. -->
+    <path d="M 150 640
+             L 150 520
+             C 150 480, 175 455, 220 452
+             L 300 448
+             C 330 446, 350 462, 368 480
+             C 410 525, 470 552, 560 568
+             C 630 580, 670 605, 676 640 Z"
+          fill="url(#shoe)"/>
+    <rect x="138" y="634" width="548" height="56" rx="26" fill="#3B0A0D" opacity="0.9"/>
+    <g stroke="#B91C24" stroke-width="15" stroke-linecap="round">
+      <line x1="372" y1="505" x2="400" y2="468"/>
+      <line x1="415" y1="530" x2="443" y2="493"/>
+      <line x1="458" y1="550" x2="486" y2="513"/>
+    </g>
+  </g>
+
+  <!-- Motion lines: pressing down. -->
+  <g stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" opacity="0.5">
+    <line x1="120" y1="300" x2="190" y2="370"/>
+    <line x1="210" y1="215" x2="280" y2="285"/>
+  </g>
+</svg>

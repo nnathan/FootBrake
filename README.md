@@ -2,6 +2,9 @@
 
 Shrink and trim iPhone videos with the hardware encoder. See `PLAN.md`.
 
+Free software in the spirit of [HandBrake](https://handbrake.fr): no ads, no monetisation, no
+telemetry. FootBrake will always respect its users.
+
 ## Layout
 - `FootBrake/`: SwiftUI iOS app (iOS 16+)
 - `FootBrakeCore/`: Swift package holding the media engine, the `footbrake-cli` Mac test harness, and tests
@@ -16,3 +19,19 @@ export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 ./Fixtures/make-fixtures.sh
 open FootBrake.xcodeproj                         # run on iPhone from Xcode
 ```
+
+## Licence
+
+Copyright (C) 2026 Naveen Nathan
+
+FootBrake is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License, version 3, as published by the Free Software Foundation
+(SPDX: `GPL-3.0-only`). It is distributed in the hope that it will
+be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See `LICENSE` for the full text.
+
+Contributions are accepted under the terms in `CONTRIBUTING.md`. The FootBrake name and icon
+are not covered by the licence; see `TRADEMARKS.md`.
+
+FootBrake contains no code from HandBrake; its presets and VideoToolbox approach were studied
+as a reference.

@@ -9,7 +9,8 @@ make them smaller (and optionally shorter), then either share them elsewhere
 (Mail, Messenger, Files, AirDrop) or save them back to Photos with their
 original date and location intact.
 
-Nothing below has been built yet. This document is for review.
+**Ethos** (in the spirit of HandBrake): free and open source, no ads, no
+monetisation, no telemetry. FootBrake will always respect its users.
 
 ---
 
