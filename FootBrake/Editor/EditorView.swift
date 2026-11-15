@@ -57,6 +57,10 @@ struct EditorView: View {
                 transport
                 markButtons
             }
+            // A single row of compact controls: larger text would truncate them.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            // A single row of compact controls: larger text would truncate them.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .padding(.horizontal)
             .padding(.vertical, 12)
 
@@ -95,6 +99,14 @@ struct EditorView: View {
             Text(storageAlert ?? "")
         }
         .onDisappear { model.tearDown() }
+        #if DEBUG
+        // Simulator testing, with -FBOpen: `-FBShowInfo` or `-FBExport`
+        .task {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("-FBShowInfo") { showingInfo = true }
+            if args.contains("-FBExport") { startExport() }
+        }
+        #endif
     }
 
     private var playerAspectRatio: CGFloat {
@@ -208,28 +220,30 @@ struct EditorView: View {
 
     private var exportButtonSection: some View {
         Section {
-            Button {
-                if let shortfall = storageShortfall {
-                    storageAlert = shortfall
-                    return
-                }
-                let job = ExportJob(source: model.source, metadata: metadataEdits)
-                switch (preset, audioKbps) {
-                case (.copy, 0):
-                    job.startCopy(range: model.selectionRange, mode: model.cutMode, audioTrack: effectiveAudioTrack,
-                                  wholeFile: model.isWholeFile)
-                case (.copy, let kbps):
-                    job.startShrinkAudio(range: model.selectionRange, mode: model.cutMode, audioBitRate: kbps * 1000,
-                                         audioTrack: effectiveAudioTrack)
-                default:
-                    job.startTranscode(range: model.selectionRange, settings: transcodeSettings,
-                                       suffix: exportSuffix)
-                }
-                exportJob = job
-            } label: {
+            Button(action: startExport) {
                 Text("Export").frame(maxWidth: .infinity).bold()
             }
         }
+    }
+
+    private func startExport() {
+        if let shortfall = storageShortfall {
+            storageAlert = shortfall
+            return
+        }
+        let job = ExportJob(source: model.source, metadata: metadataEdits)
+        switch (preset, audioKbps) {
+        case (.copy, 0):
+            job.startCopy(range: model.selectionRange, mode: model.cutMode, audioTrack: effectiveAudioTrack,
+                          wholeFile: model.isWholeFile)
+        case (.copy, let kbps):
+            job.startShrinkAudio(range: model.selectionRange, mode: model.cutMode, audioBitRate: kbps * 1000,
+                                 audioTrack: effectiveAudioTrack)
+        default:
+            job.startTranscode(range: model.selectionRange, settings: transcodeSettings,
+                               suffix: exportSuffix)
+        }
+        exportJob = job
     }
 
     /// A message if the estimated output (plus a 20% + 50 MB margin) won't fit.

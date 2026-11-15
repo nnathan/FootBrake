@@ -33,6 +33,8 @@ struct ExportSheet: View {
                 case .finished(let url, let info, let seconds):
                     ScrollView {
                         finished(url: url, info: info, seconds: seconds)
+                            // Larger text truncates the file name and pushes the buttons off screen.
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                     }
                 case .failed(let failure):
                     failed(failure)
@@ -124,15 +126,18 @@ struct ExportSheet: View {
 
             VStack(spacing: 6) {
                 nameField(url)
-                HStack(spacing: 6) {
-                    Text("\(Format.duration(info.duration)) · \(Format.bytes(info.fileSize)) ·")
-                        .foregroundStyle(.secondary)
-                    Button {
-                        showingDetails = true
-                    } label: {
-                        Label("Details", systemImage: "info.circle")
+                // One line, or stacked when large text won't fit on one.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 6) {
+                        Text("\(Format.duration(info.duration)) · \(Format.bytes(info.fileSize)) ·")
+                            .foregroundStyle(.secondary)
+                        detailsButton
                     }
-                    .buttonStyle(.borderless)
+                    VStack(spacing: 6) {
+                        Text("\(Format.duration(info.duration)) · \(Format.bytes(info.fileSize))")
+                            .foregroundStyle(.secondary)
+                        detailsButton
+                    }
                 }
                 .sheet(isPresented: $showingDetails) {
                     SourceInfoView(info: info, original: job.source.info)
@@ -205,6 +210,15 @@ struct ExportSheet: View {
     }
 
     // MARK: - Pieces
+
+    private var detailsButton: some View {
+        Button {
+            showingDetails = true
+        } label: {
+            Label("Details", systemImage: "info.circle")
+        }
+        .buttonStyle(.borderless)
+    }
 
     private func nameField(_ url: URL) -> some View {
         VStack(spacing: 6) {
