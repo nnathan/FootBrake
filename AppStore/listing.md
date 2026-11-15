@@ -6,8 +6,8 @@ Paste into App Store Connect. Character limits in brackets.
 
 | Field                    | Value                                                           |
 |--------------------------|-----------------------------------------------------------------|
-| Name [30]                | FootBrake Transcoder                                            |
-| Subtitle [30]            | Shrink, trim & convert videos                                   |
+| Name [30]                | FootBrake: a HandBrake homage (fallback: FootBrake Transcoder)  |
+| Subtitle [30]            | Open Source video compressor                                    |
 | Primary category         | Photo & Video                                                   |
 | Secondary category       | Utilities                                                       |
 | Age rating               | 4+ (no objectionable content)                                   |
@@ -19,8 +19,9 @@ Paste into App Store Connect. Character limits in brackets.
 | App privacy              | Data Not Collected                                              |
 | Encryption               | None beyond Apple's (ITSAppUsesNonExemptEncryption = NO is set) |
 
-"FootBrake" alone is reserved by another developer, so the store name is "FootBrake
-Transcoder". The name under the app icon on the home screen stays "FootBrake".
+"FootBrake" alone is reserved by another developer. The planned store name, "FootBrake: a
+HandBrake homage", waits on the HandBrake team's OK to use their name; if they decline, use
+"FootBrake Transcoder". The name under the app icon on the home screen stays "FootBrake".
 
 ## Promotional text [170]
 
@@ -28,10 +29,10 @@ Make videos smaller and shorter with your iPhone's hardware encoder, then save t
 
 ## Keywords [100]
 
-compress,compressor,resize,smaller,size,mp4,hevc,h264,email,share,4k,hdr,cut,reduce,clip,transcode
+compress,shrink,trim,convert,resize,mp4,hevc,h264,email,share,4k,hdr,cut,reduce,clip,transcode
 
-(Words already in the name or subtitle, such as "video", "shrink", "trim" and "convert", are
-indexed anyway, so they're left out. Other apps' names, such as HandBrake, aren't allowed in
+(Words already in the name or subtitle, such as "video", "compressor", "open source" and
+"HandBrake", are indexed anyway, so they're left out. Other apps' names aren't allowed in
 keywords.)
 
 ## Description [4000]
