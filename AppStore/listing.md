@@ -67,10 +67,21 @@ why the app has the background-tasks GPU entitlement.
 
 FootBrake is open source: https://github.com/nnathan/FootBrake
 
+## TestFlight: beta description
+
+FootBrake is a free and open source video transcoder for iPhone and iPad, directly inspired by
+HandBrake. It makes videos smaller and shorter using your device's hardware encoder: trim a clip,
+pick a preset or a target file size, then save it to Photos or share it. No ads, no in-app
+purchases, no tracking.
+
 ## TestFlight: what to test
 
-Thanks for testing FootBrake! Try trimming, compressing and sharing your own videos, especially
-long, 4K, HDR, slo-mo and portrait clips, and the "Fit in size" preset with different limits.
+Thanks for testing FootBrake! Take videos from your iPhone or your dashcam and try compressing,
+trimming, transcoding and removing metadata (location, device, date), then save or share the
+results. The "Fit in size" preset is worth trying with different limits.
+
+If you want to try more exotic videos, use slo-mo (up to 240 fps), 4K at 60 or 120 fps, or
+Cinematic videos from the iPhone Camera app.
 
 FootBrake has not been tested on a real iPad yet (only the simulator), so iPad feedback is
 especially welcome.

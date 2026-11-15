@@ -1,3 +1,9 @@
 // Copy to Local.xcconfig and fill in your Apple Developer Team ID
 // (Xcode > Settings > Accounts > your team, or developer.apple.com > Membership).
 DEVELOPMENT_TEAM = XXXXXXXXXX
+
+// For Tools/release.sh: an App Store Connect API key (Users and Access >
+// Integrations > App Store Connect API > Team Keys, App Manager access).
+// Put the downloaded AuthKey_<id>.p8 in ~/.appstoreconnect/private_keys/.
+ASC_KEY_ID = XXXXXXXXXX
+ASC_ISSUER_ID = xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
