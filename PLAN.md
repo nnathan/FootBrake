@@ -231,16 +231,21 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
 - **Disk space:** before starting, we check estimated output size against free
   space.
 
-### 3e. Backgrounding & thermals
-iOS suspends apps in the background, and the GPU/encoder can't be used there
-on older iOS.
-- iOS 26+: `BGContinuedProcessingTask` lets a user-started export keep running
-  with a system progress UI.
-- Older iOS: `isIdleTimerDisabled = true` during export, a short
-  `beginBackgroundTask` grace period, and a clear "keep FootBrake open" banner.
-  If the app gets interrupted, the job fails cleanly and offers a restart.
-- We watch `ProcessInfo.thermalState` and show a warning when the device runs
-  hot.
+### 3e. Backgrounding (as built, Stage 6)
+- iOS 26+: each export is submitted as a `BGContinuedProcessingTask`
+  (`net.lastninja.footbrake.export.*`, strategy `.fail`, GPU requested where
+  supported). It shows system progress and keeps the app running if the user
+  leaves. The entitlement `continued-processing.gpu` is granted.
+- **Background GPU is device-dependent.** The iPhone 17 Pro Max reports
+  none, so only **copies** run in the background. **Re-encodes** (GPU
+  rotate/scale) stay foreground-only: the export sheet says so, and leaving
+  stops the job with a clear message and Try Again (decision 2026-11-15).
+- iOS 16–25: foreground only; screen kept awake during exports.
+- Low storage: export blocked with an explanation if the estimate + 20% +
+  50 MB doesn't fit.
+- **No job queue** (decision 2026-11-15): FootBrake is for handling one clip
+  when the need arises (e.g. trimming and sharing a dashcam clip), not batch
+  processing, and re-encodes need the app open anyway.
 
 ## 3f. Real iPhone 17 Pro Max footage (Stage 1 findings, 2026-11-15)
 - Video: HEVC Main 10, **Dolby Vision profile 8.4** (HLG base layer), BT.2020.
@@ -347,6 +352,7 @@ paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable
 | **5. Fidelity** | HDR keep/tone-map, metadata copy, rotation edge cases, audio track selection | Saved-to-Photos item shows correct date/location/orientation; HDR badge |
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |
 | **7. Polish** | Custom preset editor, saved presets, Share Extension ("Open in FootBrake" from Photos) | Manual |
+| **Later (not v1)** | Background re-encodes on devices without background GPU (incl. iPhone 17 Pro Max): replace the GPU video composition with `VTPixelRotationSession` + `VTPixelTransferSession`, *if* the media engine runs under a continued-processing task (untested). v1: copies run in the background (iOS 26+); re-encodes need FootBrake open | Only if users ask |
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
 | **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |
 

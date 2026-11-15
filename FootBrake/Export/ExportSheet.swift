@@ -89,17 +89,31 @@ struct ExportSheet: View {
             } currentValueLabel: {
                 Text(progress.formatted(.percent.precision(.fractionLength(0))))
             }
-            Label {
-                Text("Keep FootBrake open until this finishes. Switching to another app or locking your phone will stop the export.")
-            } icon: {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+            if job.runsInBackground {
+                Label {
+                    Text("You can switch apps or lock your phone. iOS keeps the export going and shows its progress on the Lock Screen.")
+                } icon: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                Label {
+                    Text("Keep FootBrake open until this finishes. Switching to another app or locking your phone will stop the export.")
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
             }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
         }
     }
 

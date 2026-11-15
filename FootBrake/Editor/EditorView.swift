@@ -6,6 +6,7 @@ struct EditorView: View {
     @StateObject private var model: EditorModel
     @State private var showingInfo = false
     @State private var exportJob: ExportJob?
+    @State private var storageAlert: String?
     // Remembered between videos.
     @AppStorage("exportPreset") private var preset: OutputPreset = .original
     @AppStorage("exportCodec") private var codec: VideoCodec = .hevc
@@ -65,6 +66,11 @@ struct EditorView: View {
         }
         .sheet(isPresented: $showingInfo) { SourceInfoView(info: info) }
         .sheet(item: $exportJob) { job in ExportSheet(job: job) }
+        .alert("Not Enough Storage", isPresented: .constant(storageAlert != nil)) {
+            Button("OK") { storageAlert = nil }
+        } message: {
+            Text(storageAlert ?? "")
+        }
         .onDisappear { model.tearDown() }
     }
 
@@ -180,6 +186,10 @@ struct EditorView: View {
     private var exportButtonSection: some View {
         Section {
             Button {
+                if let shortfall = storageShortfall {
+                    storageAlert = shortfall
+                    return
+                }
                 let job = ExportJob(source: model.source, metadata: metadataEdits)
                 switch (preset, audioKbps) {
                 case (.copy, 0):
@@ -195,6 +205,16 @@ struct EditorView: View {
                 Text("Export").frame(maxWidth: .infinity).bold()
             }
         }
+    }
+
+    /// A message if the estimated output (plus a 20% + 50 MB margin) won't fit.
+    private var storageShortfall: String? {
+        let needed = Int64(Double(estimatedSize) * 1.2) + 50_000_000
+        let values = try? FileManager.default.temporaryDirectory
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let free = values?.volumeAvailableCapacityForImportantUsage, free < needed else { return nil }
+        return "This export needs about \(Format.approximateBytes(needed)), but only \(Format.bytes(free)) is free. "
+            + "Free up space in Settings › General › iPhone Storage, or trim the video or pick a smaller preset."
     }
 
     // MARK: - Metadata

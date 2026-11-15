@@ -26,6 +26,19 @@ struct ExportFailure {
     let explanation: String
     let detail: String
 
+    private init(title: String, explanation: String, detail: String) {
+        self.title = title
+        self.explanation = explanation
+        self.detail = detail
+    }
+
+    /// iOS ended the background task (e.g. it needed the resources).
+    static let stoppedByIOS = ExportFailure(
+        title: "Export stopped",
+        explanation: "iOS stopped the export while FootBrake was in the background. "
+            + "Try again, and keep FootBrake open if it happens again.",
+        detail: "Background task expired")
+
     init(_ error: Error, wentToBackground: Bool) {
         let ns = error as NSError
         detail = "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
@@ -79,6 +92,10 @@ final class ExportJob: ObservableObject, Identifiable {
     private(set) var targetFileSize: Int64?
     /// e.g. "Encoded with hardware HEVC", for re-encodes.
     @Published private(set) var encoderNote: String?
+    /// iOS 26+: the export may continue if the user leaves FootBrake.
+    @Published private(set) var runsInBackground = false
+    private var backgroundTask: AnyObject?
+    private var stoppedByIOS = false
     private var task: Task<Void, Never>?
     /// Re-runs the last export with the same settings (for Try Again).
     private var restart: (() -> Void)?
@@ -129,7 +146,7 @@ final class ExportJob: ObservableObject, Identifiable {
         activity = "Encoding…"
         targetFileSize = settings.targetFileSize
         let settings = { var s = settings; s.metadata = metadata; return s }()
-        run(suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4) { source, output, progress in
+        run(suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4, usesGPU: true) { source, output, progress in
             let result = try await Transcoder.transcode(source: source, range: range, settings: settings,
                                                         to: output, progress: progress)
             let codec = settings.codec == .hevc ? "HEVC" : "H.264"
@@ -137,12 +154,16 @@ final class ExportJob: ObservableObject, Identifiable {
         }
     }
 
-    private func run(suffix: String, fileType: AVFileType,
+    /// `usesGPU`: re-encodes rotate and scale on the GPU, so they can only
+    /// continue in the background where iOS allows background GPU work.
+    private func run(suffix: String, fileType: AVFileType, usesGPU: Bool = false,
                      work: @escaping @Sendable (URL, URL, @escaping @Sendable (Double) -> Void) async throws -> String?) {
         let source = source
-        restart = { [weak self] in self?.run(suffix: suffix, fileType: fileType, work: work) }
+        restart = { [weak self] in self?.run(suffix: suffix, fileType: fileType, usesGPU: usesGPU, work: work) }
         state = .running(progress: 0)
         wentToBackground = false
+        stoppedByIOS = false
+        startBackgroundTask(title: "Exporting \(source.info.fileName)", usesGPU: usesGPU)
         // Exports can take minutes; don't let the screen lock part-way.
         UIApplication.shared.isIdleTimerDisabled = true
         task = Task {
@@ -154,16 +175,46 @@ final class ExportJob: ObservableObject, Identifiable {
                 encoderNote = try await work(source.url, output) { p in
                     Task { @MainActor in
                         if case .running = self.state { self.state = .running(progress: p) }
+                        self.updateBackgroundTask(progress: p)
                     }
                 }
                 let info = try await MediaProbe.probe(output)
                 state = .finished(url: output, info: info, seconds: Date().timeIntervalSince(began))
+                finishBackgroundTask(success: true)
             } catch is CancellationError {
-                return
+                finishBackgroundTask(success: false)
+                if stoppedByIOS { state = .failed(.stoppedByIOS) }
             } catch {
-                state = .failed(ExportFailure(error, wentToBackground: wentToBackground))
+                finishBackgroundTask(success: false)
+                // With a background task running, leaving the app isn't the cause.
+                state = .failed(ExportFailure(error, wentToBackground: wentToBackground && !runsInBackground))
             }
         }
+    }
+
+    // MARK: - Background task (iOS 26+)
+
+    private func startBackgroundTask(title: String, usesGPU: Bool) {
+        backgroundTask = nil
+        runsInBackground = false
+        guard #available(iOS 26, *), !usesGPU || BackgroundExportTask.supportsBackgroundGPU else { return }
+        let task = BackgroundExportTask(title: title, subtitle: activity) { [weak self] in
+            self?.stoppedByIOS = true
+            self?.cancel()
+        }
+        backgroundTask = task
+        runsInBackground = task != nil
+    }
+
+    private func updateBackgroundTask(progress: Double) {
+        guard #available(iOS 26, *) else { return }
+        (backgroundTask as? BackgroundExportTask)?.update(progress: progress)
+    }
+
+    private func finishBackgroundTask(success: Bool) {
+        guard #available(iOS 26, *) else { return }
+        (backgroundTask as? BackgroundExportTask)?.finish(success: success)
+        backgroundTask = nil
     }
 
     func cancel() {

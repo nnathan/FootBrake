@@ -16,6 +16,7 @@ struct DeviceInfoView: View {
                     LabeledContent("App", value: appVersion)
                     LabeledContent("Core", value: FootBrakeCore.version)
                     LabeledContent("Device", value: deviceDescription)
+                    LabeledContent("Background exports", value: backgroundExports)
                 }
                 Section("Video encoders") {
                     ForEach(capabilities, id: \.codec) { cap in
@@ -49,6 +50,13 @@ struct DeviceInfoView: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(version) (\(build))"
+    }
+
+    private var backgroundExports: String {
+        if #available(iOS 26, *) {
+            return BackgroundExportTask.supportsBackgroundGPU ? "Supported" : "Copies only (no background GPU)"
+        }
+        return "Needs iOS 26"
     }
 
     private var deviceDescription: String {
