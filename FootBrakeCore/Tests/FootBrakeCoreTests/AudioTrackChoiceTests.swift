@@ -100,3 +100,24 @@ final class ProgressLog: @unchecked Sendable {
     func add(_ value: Double) { lock.withLock { values.append(value) } }
     var all: [Double] { lock.withLock { values } }
 }
+
+@Suite(.enabled(if: Fixtures.available, "run Fixtures/make-fixtures.sh first"))
+struct AudioBitRateTests {
+    /// Asking for more than the original AAC's bitrate keeps the original
+    /// instead of re-encoding it larger.
+    @Test func copyNeverInflatesAudio() async throws {
+        let source = Fixtures.url("h264_720p24.mp4")   // 128 kbps stereo AAC
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("fb-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: out) }
+        let range = CMTimeRange(start: .zero, end: CMTime(seconds: 3, preferredTimescale: 600))
+        try await AudioReencoder.export(source: source, range: range, mode: .keyframe, audioBitRate: 256_000, to: out)
+        let before = try #require(try await MediaProbe.probe(source).audio.first)
+        let after = try #require(try await MediaProbe.probe(out).audio.first)
+        #expect(after.bitRate <= before.bitRate * 1.05)
+    }
+
+    @Test func labels() {
+        #expect(AudioPlan.kbpsLabel(0) == "Keep original")
+        #expect(AudioPlan.kbpsChoices.first == 0 && AudioPlan.kbpsChoices.last == 256)
+    }
+}

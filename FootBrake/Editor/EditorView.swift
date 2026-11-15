@@ -410,13 +410,10 @@ struct EditorView: View {
             }
         }
         if effectiveAudioTrack != .none && !info.audio.isEmpty {
-            Picker("Audio", selection: $audioKbps) {
-                Text("Keep").tag(0)
-                Text("64k").tag(64)
-                Text("96k").tag(96)
-                Text("128k").tag(128)
+            Picker("Audio quality", selection: $audioKbps) {
+                ForEach(AudioPlan.kbpsChoices, id: \.self) { Text(AudioPlan.kbpsLabel($0)).tag($0) }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .onChange(of: audioKbps) { UserDefaults.standard.set($0, forKey: audioKey(preset)) }
         }
         if preset == .fitSize, let limit = transcodeSettings.targetFileSize {
@@ -554,7 +551,8 @@ struct EditorView: View {
         if effectiveAudioTrack == .none && !info.audio.isEmpty {
             notes.append("The exported video will have no sound.")
         } else if audioKbps > 0 {
-            notes.append("64k suits speech; 128k suits music.")
+            notes.append("Audio is never made larger than the original: if it's already at or below "
+                + "\(audioKbps) kbps, it's kept as is.")
         }
         return notes.joined(separator: " ")
     }

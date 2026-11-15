@@ -122,12 +122,13 @@ final class ExportJob: ObservableObject, Identifiable {
     }
 
     /// "Copying…" or "Encoding…", shown while running.
-    private(set) var activity = "Copying…"
+    @Published private(set) var activity = "Copying…"
+    /// Size of the first attempt when "Fit in size" needed a second pass.
+    @Published private(set) var firstAttemptSize: Int64?
 
     func startCopy(range: CMTimeRange, mode: CopyCutMode, audioTrack: AudioTrackChoice, wholeFile: Bool) {
-        activity = "Copying…"
         let metadata = metadata
-        run(suffix: wholeFile ? "copy" : "trimmed", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
+        run(activity: "Copying…", suffix: wholeFile ? "copy" : "trimmed", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
             try await CopyExporter.export(source: source, range: range, mode: mode, audioTrack: audioTrack,
                                           metadata: metadata, to: output, progress: progress)
             return nil
@@ -135,9 +136,8 @@ final class ExportJob: ObservableObject, Identifiable {
     }
 
     func startShrinkAudio(range: CMTimeRange, mode: CopyCutMode, audioBitRate: Int, audioTrack: AudioTrackChoice) {
-        activity = "Shrinking audio…"
         let metadata = metadata
-        run(suffix: "smaller audio", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
+        run(activity: "Shrinking audio…", suffix: "smaller audio", fileType: CopyExporter.fileType(for: source.url)) { source, output, progress in
             try await AudioReencoder.export(source: source, range: range, mode: mode, audioBitRate: audioBitRate,
                                             audioTrack: audioTrack, metadata: metadata, to: output, progress: progress)
             return nil
@@ -145,12 +145,19 @@ final class ExportJob: ObservableObject, Identifiable {
     }
 
     func startTranscode(range: CMTimeRange, settings: TranscodeSettings, suffix: String) {
-        activity = "Encoding…"
         targetFileSize = settings.targetFileSize
         let settings = { var s = settings; s.metadata = metadata; return s }()
-        run(suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4, usesGPU: true) { source, output, progress in
+        let limit = settings.targetFileSize.map(Format.bytes)
+        run(activity: "Encoding…", suffix: suffix, fileType: settings.container == .mov ? .mov : .mp4,
+            usesGPU: true) { source, output, progress in
             let result = try await Transcoder.transcode(source: source, range: range, settings: settings,
-                                                        to: output, progress: progress)
+                                                        to: output, progress: progress) { firstSize in
+                Task { @MainActor in
+                    self.firstAttemptSize = firstSize
+                    self.activity = "Pass 2 of 2: fitting under \(limit ?? "the limit")…"
+                    self.state = .running(progress: 0)
+                }
+            }
             let codec = settings.codec == .hevc ? "HEVC" : "H.264"
             return result.usedHardwareEncoder.map { $0 ? "Encoded with hardware \(codec)" : "Encoded in software (\(codec))" }
         }
@@ -158,10 +165,14 @@ final class ExportJob: ObservableObject, Identifiable {
 
     /// `usesGPU`: re-encodes rotate and scale on the GPU, so they can only
     /// continue in the background where iOS allows background GPU work.
-    private func run(suffix: String, fileType: AVFileType, usesGPU: Bool = false,
+    private func run(activity: String, suffix: String, fileType: AVFileType, usesGPU: Bool = false,
                      work: @escaping @Sendable (URL, URL, @escaping @Sendable (Double) -> Void) async throws -> String?) {
         let source = source
-        restart = { [weak self] in self?.run(suffix: suffix, fileType: fileType, usesGPU: usesGPU, work: work) }
+        restart = { [weak self] in
+            self?.run(activity: activity, suffix: suffix, fileType: fileType, usesGPU: usesGPU, work: work)
+        }
+        self.activity = activity
+        firstAttemptSize = nil
         state = .running(progress: 0)
         wentToBackground = false
         stoppedByIOS = false

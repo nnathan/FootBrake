@@ -37,6 +37,8 @@ public struct TranscodeResult: Sendable {
     /// Encodes it took: 2 when a size-targeted first pass came out over.
     public var attempts: Int
     public var fileSize: Int64
+    /// Size of the first attempt, when a second pass was needed to fit.
+    public var firstAttemptSize: Int64?
 }
 
 /// Re-encodes a video with the hardware encoder:
@@ -53,12 +55,16 @@ public enum Transcoder {
         range: CMTimeRange? = nil,
         settings: TranscodeSettings,
         to output: URL,
-        progress: @escaping @Sendable (Double) -> Void = { _ in }
+        progress: @escaping @Sendable (Double) -> Void = { _ in },
+        /// Called with the first attempt's size when a size-targeted export
+        /// came out over its limit and is encoded a second time.
+        secondPass: @escaping @Sendable (Int64) -> Void = { _ in }
     ) async throws -> TranscodeResult {
         let info = try await MediaProbe.probe(source)
         let duration = range?.duration.seconds ?? info.duration
         var plan = TranscodePlan(source: info, settings: settings, duration: duration, device: Capabilities.probe())
         let began = Date()
+        var firstAttemptSize: Int64?
 
         for attempt in 1... {
             let job = try await TranscodeJob(source: source, info: info, range: range, plan: plan, output: output)
@@ -75,12 +81,15 @@ public enum Transcoder {
                case .averageBitRate(let bps) = plan.rateControl {
                 let excess = Double(size) - Double(target) * 0.97
                 plan.rateControl = .averageBitRate(max(Int(Double(bps) - excess * 8 / max(duration, 0.1)), 50_000))
+                firstAttemptSize = size
+                secondPass(size)
                 continue
             }
             return TranscodeResult(output: output, plan: plan, rateControl: job.appliedRateControl,
                                    usedHardwareEncoder: job.usedHardwareEncoder,
                                    framesRead: job.framesRead, framesEncoded: job.framesEncoded,
-                                   seconds: Date().timeIntervalSince(began), attempts: attempt, fileSize: size)
+                                   seconds: Date().timeIntervalSince(began), attempts: attempt, fileSize: size,
+                                   firstAttemptSize: firstAttemptSize)
         }
         fatalError("unreachable")
     }
@@ -176,8 +185,7 @@ final class TranscodeJob: @unchecked Sendable {
             switch plan.settings.audio {
             case .aac(let target):
                 bitRate = target
-                passthrough = audio.codecFourCC == "aac " && audio.channels <= 2
-                    && audio.bitRate > 0 && audio.bitRate <= Double(target) * 1.15
+                passthrough = AudioPlan.keepsOriginal(audio, target: target)
             default:
                 // Keep: AAC copies into MP4 and MOV as-is; anything else becomes AAC.
                 bitRate = 160_000

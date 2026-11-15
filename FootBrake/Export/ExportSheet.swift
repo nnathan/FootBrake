@@ -148,6 +148,11 @@ struct ExportSheet: View {
                         .font(.caption)
                         .foregroundStyle(fits ? Color.green : Color.orange)
                 }
+                if let first = job.firstAttemptSize {
+                    Text("Fitted in 2 passes (first try \(Format.bytes(first)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if let note = job.encoderNote {
                     Label(note, systemImage: note.hasPrefix("Encoded with hardware") ? "cpu" : "exclamationmark.triangle.fill")
                         .font(.caption)

@@ -80,21 +80,28 @@ final class AudioReencodeJob: @unchecked Sendable {
             // The chosen track (by default the main stereo one) → stereo AAC.
             if let index = audioTrack.singleTrack(in: info.audio), index < pairs.count {
                 let (track, info) = pairs[index]
-                let channels = min(2, max(1, info.channels))
-                let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-                    AVFormatIDKey: kAudioFormatLinearPCM,
-                    AVLinearPCMBitDepthKey: 32,
-                    AVLinearPCMIsFloatKey: true,
-                    AVLinearPCMIsNonInterleaved: false,
-                    AVNumberOfChannelsKey: channels,
-                ])
-                let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-                    AVFormatIDKey: kAudioFormatMPEG4AAC,
-                    AVNumberOfChannelsKey: channels,
-                    AVSampleRateKey: info.sampleRate > 0 ? min(info.sampleRate, 48_000) : 48_000,
-                    AVEncoderBitRateKey: audioBitRate,
-                ])
-                audio.append((output, input))
+                if AudioPlan.keepsOriginal(info, target: audioBitRate) {
+                    // Already at or below the target: copy it rather than inflate it.
+                    let hint = try await track.load(.formatDescriptions).first
+                    audio.append((AVAssetReaderTrackOutput(track: track, outputSettings: nil),
+                                  AVAssetWriterInput(mediaType: .audio, outputSettings: nil, sourceFormatHint: hint)))
+                } else {
+                    let channels = min(2, max(1, info.channels))
+                    let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM,
+                        AVLinearPCMBitDepthKey: 32,
+                        AVLinearPCMIsFloatKey: true,
+                        AVLinearPCMIsNonInterleaved: false,
+                        AVNumberOfChannelsKey: channels,
+                    ])
+                    let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+                        AVFormatIDKey: kAudioFormatMPEG4AAC,
+                        AVNumberOfChannelsKey: channels,
+                        AVSampleRateKey: info.sampleRate > 0 ? min(info.sampleRate, 48_000) : 48_000,
+                        AVEncoderBitRateKey: audioBitRate,
+                    ])
+                    audio.append((output, input))
+                }
             }
         } else {
             // Copied as-is: every track (including spatial audio), one, or none.

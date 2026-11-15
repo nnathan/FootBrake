@@ -38,6 +38,28 @@ public enum AudioPlan: Sendable, Equatable, Codable {
     public init(kbps: Int) {
         self = kbps > 0 ? .aac(bitRate: kbps * 1000) : .keep
     }
+
+    /// Audio quality choices in kbps (0 = keep the original).
+    public static let kbpsChoices = [0, 64, 96, 128, 160, 192, 256]
+
+    public static func kbpsLabel(_ kbps: Int) -> String {
+        switch kbps {
+        case 0: "Keep original"
+        case 64: "64 kbps · Speech"
+        case 96: "96 kbps · Speech and music"
+        case 128: "128 kbps · Good"
+        case 160: "160 kbps · Very good"
+        case 192: "192 kbps · High"
+        default: "\(kbps) kbps · Highest"
+        }
+    }
+
+    /// Re-encoding stereo-or-less AAC at or above its own bitrate only makes it
+    /// bigger and adds a generation of loss, so it's copied instead.
+    static func keepsOriginal(_ track: AudioTrackInfo, target bitRate: Int) -> Bool {
+        track.codecFourCC == "aac " && track.channels <= 2
+            && track.bitRate > 0 && track.bitRate <= Double(bitRate) * 1.15
+    }
 }
 
 public enum OutputContainer: String, Sendable, Codable {
