@@ -151,6 +151,20 @@ through as in 3a.
 progress (`last PTS / range duration`) as an `AsyncStream<Progress>` and
 supports cancel (`reader.cancelReading()`, `writer.cancelWriting()`).
 
+### 3b′. As built (Stage 3, 2026-11-15)
+- **Rotation is baked into the pixels** (user decision): the composition's
+  layer transform rotates portrait video upright, the output has no display
+  matrix, and "720p" output of a portrait clip is 720×1280.
+- Video path: `AVAssetReaderVideoCompositionOutput` (HW decode + rotate + scale
+  + colour in one GPU pass, `sourceTrackIDForFrameTiming` keeps VFR timestamps)
+  → frame-rate cap by timestamp (min gap 0.7/cap) → **`VTCompressionSession`
+  directly** (needed for `VariableBitRate`/`ConstantQualityFactor`) →
+  `AVAssetWriterInput` passthrough.
+- Audio: the stereo AAC track (not APAC), passed through if already ≤ target
+  bitrate, otherwise LPCM → AAC.
+- MP4 output keeps creation date and location (AVAssetWriter maps them to MP4
+  boxes); make/model only survive in MOV.
+
 ### 3c. Rate control & "fits in N MB" (revised 2026-11-15)
 "Constant quality" and "variable bitrate" are not opposites: a good
 constant-quality mode (x264 CRF) *is* VBR. What matters is which VideoToolbox
@@ -159,12 +173,19 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
 | Mode | iOS | Behaviour | Use |
 |---|---|---|---|
 | `ConstantQualityFactor` (0–1) | 27+ | CRF-like: "consistent visual quality with or without bitrate limit" | Resolution presets on iOS 27+ |
-| `VariableBitRate` + `VBVMaxBitRate` | 26+ | True VBR: "allocates higher bitrate for complex segments" | Resolution presets on iOS 26; size presets on 26+ |
-| `AverageBitRate` + `DataRateLimits` | 8+ | Soft average target plus hard peak cap (VBR in practice) | Fallback for iOS 16–25, all presets |
+| `VariableBitRate` + `VBVMaxBitRate` | 26+ | True VBR: "allocates higher bitrate for complex segments" | **Not used**: the iPhone 17 Pro Max HEVC encoder ignores its target (see below) |
+| `AverageBitRate` + `DataRateLimits` | 8+ | Soft average target plus hard peak cap (VBR in practice) | **Default for all presets** (decided 2026-11-15) |
 | `Quality` | 8+ | "For some formats… a fixed quantization parameter". This is constant QP, not CRF, so it's inefficient | Not a default; maybe a hidden advanced option |
 | `ConstantBitRate` | 16+ | Legacy CBR | Never |
 | Multi-pass | n/a | Not available on iOS | n/a |
 
+- **On-device measurement (iPhone 17 Pro Max, iOS 26.7.1, 60 s handheld 4K60
+  Dolby Vision clip, 2026-11-15):** HEVC VBR produced the same size whatever
+  the target (≈5.8 Mbps at 1080p for targets 1.9–5.6 Mbps; ≈3.1 at 720p,
+  ≈1.75 at 480p). ABR landed within ~5% of target on both codecs. VBR 5.8 Mbps
+  vs ABR 5.7 and 3.8 Mbps looked practically the same, so **ABR is the
+  default**. Every encode took ≈19.5 s for 60 s of 4K60, limited by
+  decoding the source, not by encoding.
 - Bitrate targets come from bits-per-pixel: `bps = width × height × fps × bpp`,
   starting at `bpp ≈ 0.10` (H.264) and `≈ 0.06` (HEVC). 60 fps uses about ×1.5,
   not ×2. We cap at the source bitrate, because re-encoding should never grow
@@ -199,8 +220,11 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
   preserve timestamps rather than resampling.
 - **Metadata:** we copy creation date, GPS location, and make/model
   (`AVMetadataItem`) so the output sorts correctly when saved back to Photos.
-- **HDR:** we carry color attachments through. Dolby Vision RPU metadata is
-  dropped on re-encode, but the base HLG layer stays.
+- **HDR:** HEVC keeps HDR as 10-bit HLG (Main 10). VideoToolbox regenerates
+  **Dolby Vision 8.4** metadata (config record + per-frame RPU) for HLG Main 10
+  encodes, so outputs match the iPhone's own format (verified on Mac
+  2026-11-15; to confirm on iPhone). H.264 or "keep HDR" off → tone-mapped to
+  SDR BT.709 by the compositor, matching Apple's own SDR rendering.
 - **Disk space:** before starting, we check estimated output size against free
   space.
 
@@ -315,6 +339,7 @@ paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable
 | **1. Import & inspect** | Pick from Photos/Files, show full media info, play it | Compare InspectorView against `ffprobe` for each fixture + your own camera-roll clips |
 | **2. Trim + Copy** | Trim UI, passthrough export with keyframe snap/edit-list option, save/share | `ffprobe` output durations & first PTS; no quality loss (bit-identical frames) |
 | **3. Transcode** | Original-size / 1080 / 720 / 480 presets, H.264 & HEVC, AAC, fps cap, progress + cancel | CLI on Mac first (VMAF scores, sizes), then device: speed, thermal, playback in Photos |
+| **3½. Metadata** | Editor "Metadata" section: Remove location, Remove device info (toggles, remembered), Recording date Original / Custom (date-time picker, starts at original, phone's time zone) / Remove (not remembered). Rows show current values and only appear if present. Export button moves below it. Applies to Copy, shrink-audio, transcode and Save to Photos; Copy+Keep drops camera-data tracks if they carry location/device data | `ffprobe` + FootBrake probe for every combination; Photos info panel |
 | **4. Small Streaming** | 10 MB / 25 MB target-size presets with size check + retry, size estimate in UI | Outputs ≤ target for a range of durations; send via Mail / Messenger |
 | **5. Fidelity** | HDR keep/tone-map, metadata copy, rotation edge cases, audio track selection | Saved-to-Photos item shows correct date/location/orientation; HDR badge |
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |

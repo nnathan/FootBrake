@@ -32,6 +32,17 @@ public struct EncoderCapability: Sendable, Equatable {
     /// Constant-quality rate control (`kVTCompressionPropertyKey_Quality`).
     public let supportsConstantQuality: Bool
     public let supportsSpeedPriority: Bool
+
+    public init(codec: VideoCodec, encoderID: String?, isAvailable: Bool, isHardwareAccelerated: Bool,
+                supports10Bit: Bool, supportsConstantQuality: Bool, supportsSpeedPriority: Bool) {
+        self.codec = codec
+        self.encoderID = encoderID
+        self.isAvailable = isAvailable
+        self.isHardwareAccelerated = isHardwareAccelerated
+        self.supports10Bit = supports10Bit
+        self.supportsConstantQuality = supportsConstantQuality
+        self.supportsSpeedPriority = supportsSpeedPriority
+    }
 }
 
 /// Probes VideoToolbox for encoder support, mirroring HandBrake's
@@ -82,7 +93,7 @@ public enum Capabilities {
         #endif
     }
 
-    private static func isHardwareEncoder(_ encoderID: String) -> Bool {
+    static func isHardwareEncoder(_ encoderID: String) -> Bool {
         var listOut: CFArray?
         guard VTCopyVideoEncoderList(nil, &listOut) == noErr,
               let list = listOut as? [[String: Any]] else { return false }

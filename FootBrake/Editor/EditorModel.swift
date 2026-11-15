@@ -69,6 +69,53 @@ final class EditorModel: ObservableObject {
 
     var isWholeFile: Bool { start <= 0.001 && end >= duration - 0.001 }
 
+    /// Encoder support on this device, probed once. In debug builds the
+    /// About screen can pretend there are only software encoders.
+    let capabilities: [EncoderCapability] = {
+        let probed = Capabilities.probe()
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders) {
+            return probed.map {
+                EncoderCapability(codec: $0.codec, encoderID: $0.encoderID, isAvailable: $0.isAvailable,
+                                  isHardwareAccelerated: false, supports10Bit: $0.supports10Bit,
+                                  supportsConstantQuality: $0.supportsConstantQuality,
+                                  supportsSpeedPriority: $0.supportsSpeedPriority)
+            }
+        }
+        #endif
+        return probed
+    }()
+
+    func isHardware(_ codec: VideoCodec) -> Bool {
+        capabilities.first { $0.codec == codec }?.isHardwareAccelerated ?? false
+    }
+
+    func plan(for settings: TranscodeSettings) -> TranscodePlan {
+        TranscodePlan(source: source.info, settings: settings, device: capabilities)
+    }
+
+    /// Bitrate budget × selection length. Encoders land near, not exactly on, the target.
+    func estimatedSize(for plan: TranscodePlan) -> Int64 {
+        let videoBps: Int = switch plan.rateControl {
+        case .averageBitRate(let bps), .variableBitRate(let bps): bps
+        case .constantQuality, .fixedQuality: Int(source.info.video?.bitRate ?? 0)
+        }
+        let sourceAudio = source.info.audio.first { $0.codecFourCC == "aac " } ?? source.info.audio.first
+        let audioBps: Int = switch plan.settings.audio {
+        case .aac(let bps): min(bps, Int(sourceAudio?.bitRate ?? Double(bps)))
+        case .keep: Int(sourceAudio?.bitRate ?? 160_000)
+        case .none: 0
+        }
+        return Int64(Double(videoBps + audioBps) * selectionDuration / 8)
+    }
+
+    /// Video copied as-is plus re-encoded audio at `audioBitRate`.
+    func estimatedShrinkAudioSize(audioBitRate: Int) -> Int64 {
+        let seconds = end - effectiveStart
+        let video = source.info.video?.bitRate ?? 0
+        return Int64((video + Double(audioBitRate)) * seconds / 8)
+    }
+
     /// Copy size scales with duration, since every sample is kept as-is.
     var estimatedCopySize: Int64 {
         guard duration > 0 else { return 0 }

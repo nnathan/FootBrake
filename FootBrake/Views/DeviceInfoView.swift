@@ -5,6 +5,9 @@ import SwiftUI
 struct DeviceInfoView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var capabilities: [EncoderCapability] = []
+    #if DEBUG
+    @AppStorage(DebugSettings.simulateSoftwareEncoders) private var simulateSoftware = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -19,6 +22,16 @@ struct DeviceInfoView: View {
                         EncoderRow(capability: cap)
                     }
                 }
+                #if DEBUG
+                Section {
+                    Toggle("Force software encoders", isOn: $simulateSoftware)
+                    NavigationLink("Measurement run") { MeasurementView() }
+                } header: {
+                    Text("Debug")
+                } footer: {
+                    Text("Shows the editor's warning and encodes with Apple's software encoder (iOS 17.4+), to test the slow path. Applies to videos opened after changing it.")
+                }
+                #endif
             }
             .navigationTitle("About This Device")
             .navigationBarTitleDisplayMode(.inline)
@@ -78,3 +91,10 @@ private struct EncoderRow: View {
 #Preview {
     DeviceInfoView()
 }
+
+#if DEBUG
+/// UserDefaults keys for debug-only switches. Compiled out of release builds.
+enum DebugSettings {
+    static let simulateSoftwareEncoders = "debug.simulateSoftwareEncoders"
+}
+#endif

@@ -113,3 +113,34 @@ struct DurationParsingTests {
         #expect(Format.parseDuration("a:b") == nil)
     }
 }
+
+@Suite(.enabled(if: Fixtures.available, "run Fixtures/make-fixtures.sh first"))
+struct AudioReencoderTests {
+    @Test func copiesVideoAndShrinksAudio() async throws {
+        let source = Fixtures.url("multi_audio_51_stereo.mov")
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("fb-\(UUID().uuidString).mov")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let range = CMTimeRange(start: .zero, end: CMTime(seconds: 4, preferredTimescale: 600))
+        try await AudioReencoder.export(source: source, range: range, mode: .keyframe,
+                                        audioBitRate: 64_000, to: output)
+
+        let before = try await MediaProbe.probe(source), after = try await MediaProbe.probe(output)
+        #expect(abs(after.duration - 4) < 0.05)
+        #expect(after.video?.codedSize == before.video?.codedSize)
+        #expect(abs((after.video?.bitRate ?? 0) - (before.video?.bitRate ?? 0)) / (before.video?.bitRate ?? 1) < 0.1)
+        #expect(after.audio.count == 1)
+        #expect(after.audio.first?.channels == 2)
+        #expect((after.audio.first?.bitRate ?? .infinity) < 80_000)
+    }
+
+    @Test func keepsRotationFlag() async throws {
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent("fb-\(UUID().uuidString).mov")
+        defer { try? FileManager.default.removeItem(at: output) }
+        let range = CMTimeRange(start: .zero, end: CMTime(seconds: 2, preferredTimescale: 600))
+        try await AudioReencoder.export(source: Fixtures.url("portrait_rotated_1080p30.mov"), range: range,
+                                        mode: .exact, audioBitRate: 64_000, to: output)
+        let video = try #require(try await MediaProbe.probe(output).video)
+        #expect(video.codedSize == CGSize(width: 1920, height: 1080))
+        #expect(video.isPortrait)
+    }
+}

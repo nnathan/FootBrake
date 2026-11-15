@@ -6,6 +6,13 @@ struct EditorView: View {
     @StateObject private var model: EditorModel
     @State private var showingInfo = false
     @State private var exportJob: ExportJob?
+    // Remembered between videos.
+    @AppStorage("exportPreset") private var preset: OutputPreset = .original
+    @AppStorage("exportCodec") private var codec: VideoCodec = .hevc
+    @AppStorage("exportFrameRate") private var frameRateCap = 30
+    @AppStorage("exportKeepHDR") private var keepHDR = true
+    /// Audio picker value (0 = keep), remembered per preset in UserDefaults.
+    @State private var audioKbps = 0
 
     init(source: SourceVideo) {
         _model = StateObject(wrappedValue: EditorModel(source: source))
@@ -138,19 +145,33 @@ struct EditorView: View {
 
     private var exportSection: some View {
         Section {
-            LabeledContent("Mode", value: "Copy (no re-encode)")
-            Picker("Cut", selection: $model.cutMode) {
-                Text("At keyframe").tag(CopyCutMode.keyframe)
-                Text("Exact").tag(CopyCutMode.exact)
+            Picker("Preset", selection: $preset) {
+                ForEach(availablePresets) { Text($0.title).tag($0) }
             }
-            .pickerStyle(.segmented)
-            if model.cutMode == .keyframe, let keyframe = model.keyframeStart, keyframe < model.start - 0.001 {
-                LabeledContent("Starts at", value: "\(Format.duration(keyframe)) (keyframe)")
+            .onChange(of: preset) { newPreset in
+                codec = newPreset.defaultCodec
+                audioKbps = storedAudioKbps(for: newPreset)
             }
-            LabeledContent("Estimated size", value: "≈ \(Format.bytes(model.estimatedCopySize))")
+            .onAppear { audioKbps = storedAudioKbps(for: preset) }
+
+            if preset == .copy {
+                copyOptions
+            } else {
+                transcodeOptions
+            }
+            audioOptions
+
             Button {
                 let job = ExportJob(source: model.source)
-                job.startCopy(range: model.selectionRange, mode: model.cutMode, wholeFile: model.isWholeFile)
+                switch (preset, audioKbps) {
+                case (.copy, 0):
+                    job.startCopy(range: model.selectionRange, mode: model.cutMode, wholeFile: model.isWholeFile)
+                case (.copy, let kbps):
+                    job.startShrinkAudio(range: model.selectionRange, mode: model.cutMode, audioBitRate: kbps * 1000)
+                default:
+                    job.startTranscode(range: model.selectionRange, settings: transcodeSettings,
+                                       suffix: preset.fileSuffix)
+                }
                 exportJob = job
             } label: {
                 Text("Export").frame(maxWidth: .infinity).bold()
@@ -158,9 +179,131 @@ struct EditorView: View {
         } header: {
             Text("Export")
         } footer: {
-            Text(model.cutMode == .keyframe
-                 ? "Copies every frame untouched. The clip starts at the keyframe at or before your start point, which plays everywhere."
-                 : "Copies every frame untouched and starts exactly at your start point. A few websites may show a short freeze at the start.")
+            Text(footerText)
         }
+    }
+
+    /// Presets that would actually shrink this video (plus Copy and Original).
+    private var availablePresets: [OutputPreset] {
+        let short = info.video.map { Double(min($0.displaySize.width, $0.displaySize.height)) } ?? 1080
+        return OutputPreset.allCases.filter { $0.reducesSize(ofShortSide: short) }
+    }
+
+    @ViewBuilder
+    private var copyOptions: some View {
+        Picker("Cut", selection: $model.cutMode) {
+            Text("At keyframe").tag(CopyCutMode.keyframe)
+            Text("Exact").tag(CopyCutMode.exact)
+        }
+        .pickerStyle(.segmented)
+        if model.cutMode == .keyframe, let keyframe = model.keyframeStart, keyframe < model.start - 0.001 {
+            LabeledContent("Starts at", value: "\(Format.duration(keyframe)) (keyframe)")
+        }
+    }
+
+    @ViewBuilder
+    private var transcodeOptions: some View {
+        Picker("Codec", selection: $codec) {
+            Text("HEVC").tag(VideoCodec.hevc)
+            Text("H.264").tag(VideoCodec.h264)
+        }
+        .pickerStyle(.segmented)
+        if sourceAbove30 {
+            Picker("Frame rate", selection: $frameRateCap) {
+                Text("30 fps").tag(30)
+                Text("60 fps").tag(60)
+            }
+            .pickerStyle(.segmented)
+        } else {
+            // Frame rates are only ever capped, never raised, so there's no choice to make.
+            LabeledContent("Frame rate", value: "\(Format.frameRate(info.video?.nominalFrameRate ?? 30)) (same as source)")
+        }
+        if sourceIsHDR && codec == .hevc {
+            Toggle("Keep HDR", isOn: $keepHDR)
+        }
+        LabeledContent("Output", value: outputDescription(model.plan(for: transcodeSettings)))
+        if !model.isHardware(codec) {
+            Label("Software encoding: much slower and uses more battery", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private var audioOptions: some View {
+        Picker("Audio", selection: $audioKbps) {
+            Text("Keep").tag(0)
+            Text("64k").tag(64)
+            Text("96k").tag(96)
+            Text("128k").tag(128)
+        }
+        .pickerStyle(.segmented)
+        .onChange(of: audioKbps) { UserDefaults.standard.set($0, forKey: audioKey(preset)) }
+        if let audio = mainAudio {
+            LabeledContent("Audio now", value: "\(audio.codecName) \(audio.channelLayoutName), \(Format.bitRate(audio.bitRate))")
+        }
+        LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize))")
+    }
+
+    private var estimatedSize: Int64 {
+        switch (preset, audioKbps) {
+        case (.copy, 0): model.estimatedCopySize
+        case (.copy, let kbps): model.estimatedShrinkAudioSize(audioBitRate: kbps * 1000)
+        default: model.estimatedSize(for: model.plan(for: transcodeSettings))
+        }
+    }
+
+    private var mainAudio: AudioTrackInfo? {
+        info.audio.first { $0.codecFourCC == "aac " } ?? info.audio.first
+    }
+
+    private func audioKey(_ preset: OutputPreset) -> String { "exportAudioKbps.\(preset.rawValue)" }
+
+    private func storedAudioKbps(for preset: OutputPreset) -> Int {
+        UserDefaults.standard.object(forKey: audioKey(preset)) as? Int ?? preset.defaultAudioKbps
+    }
+
+    private var transcodeSettings: TranscodeSettings {
+        var settings = preset.settings(codec: codec, frameRateCap: frameRateCap, keepHDR: keepHDR, audioKbps: audioKbps)
+        #if DEBUG
+        settings.forceSoftwareEncoder = UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders)
+        #endif
+        return settings
+    }
+
+    private var sourceAbove30: Bool { (info.video?.nominalFrameRate ?? 0) > 31 }
+    private var sourceIsHDR: Bool { info.video?.hdrFormat.isHDR ?? false }
+
+    private func outputDescription(_ plan: TranscodePlan) -> String {
+        let size = "\(Int(plan.outputSize.width)) × \(Int(plan.outputSize.height))"
+        let range = plan.hdr.isHDR ? " HDR" : ""
+        return "\(size) · \(plan.settings.codec == .hevc ? "HEVC" : "H.264")\(range) · \(Format.frameRate(plan.frameRate))"
+    }
+
+    private var footerText: String {
+        var notes: [String] = []
+        if preset == .copy {
+            notes.append(model.cutMode == .keyframe
+                ? "Copies the video untouched. The clip starts at the keyframe at or before your start point, which plays everywhere."
+                : "Copies the video untouched and starts exactly at your start point. A few websites may show a short freeze at the start.")
+            if audioKbps > 0 {
+                notes.append("Only the main audio track is re-encoded; spatial audio and other extra tracks are left out.")
+            }
+        } else {
+            notes.append(codec == .hevc
+                ? "HEVC gives the smallest files and plays on Apple devices and most modern phones and browsers."
+                : "H.264 plays everywhere, at roughly 1.5× the size of HEVC.")
+            let other: VideoCodec = codec == .hevc ? .h264 : .hevc
+            if !model.isHardware(codec) {
+                notes.append(model.isHardware(other)
+                    ? "This iPhone has no hardware encoder for \(codec.displayName); \(other.displayName) would be much faster."
+                    : "This iPhone has no hardware video encoder available, so exports will be slow.")
+            }
+            if sourceIsHDR && (codec == .h264 || !keepHDR) {
+                notes.append("HDR will be converted to standard range, so it looks right on any screen.")
+            }
+        }
+        if audioKbps > 0 { notes.append("64k suits speech; 128k suits music.") }
+        return notes.joined(separator: " ")
     }
 }

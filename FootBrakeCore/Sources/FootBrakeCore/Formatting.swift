@@ -6,6 +6,14 @@ public enum Format {
         ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
     }
 
+    /// Size rounded to two significant figures (e.g. "88 MB", "2.1 MB",
+    /// "150 MB"), for estimates whose precision shouldn't be overstated.
+    public static func approximateBytes(_ count: Int64) -> String {
+        guard count > 0 else { return bytes(0) }
+        let magnitude = pow(10, floor(log10(Double(count))) - 1)
+        return bytes(Int64((Double(count) / magnitude).rounded() * magnitude))
+    }
+
     public static func bitRate(_ bps: Double) -> String {
         bps >= 1_000_000
             ? String(format: "%.1f Mbps", bps / 1_000_000)

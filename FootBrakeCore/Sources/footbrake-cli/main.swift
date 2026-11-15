@@ -15,6 +15,12 @@ let usage = """
       probe <file>... print media info for each file
       copy <in> <out> --start <time> --end <time> [--exact]
                       trim without re-encoding (default: start at previous keyframe)
+      shrink-audio <in> <out> [--kbps <n>] [--start <time>] [--end <time>] [--exact]
+                      copy video untouched, re-encode audio to AAC (default 96 kbps)
+      transcode <in> <out> [--codec hevc|h264] [--short <px>] [--fps 30|60]
+                [--vbr <kbps> | --abr <kbps> | --cq <0-1> | --qp <0-1>] [--sdr]
+                [--start <time>] [--end <time>] [--audio <kbps>|0 to keep] [--software]
+                      re-encode with the hardware encoder
     """
 
 func printCapabilities() {
@@ -84,6 +90,56 @@ case "copy" where arguments.count >= 3:
                                   mode: arguments.contains("--exact") ? .exact : .keyframe, to: output)
     let result = try await MediaProbe.probe(output)
     print("wrote \(output.path): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
+case "shrink-audio" where arguments.count >= 3:
+    func value(_ flag: String) -> String? {
+        arguments.firstIndex(of: flag).flatMap { i in i + 1 < arguments.count ? arguments[i + 1] : nil }
+    }
+    let source = URL(fileURLWithPath: arguments[1]), output = URL(fileURLWithPath: arguments[2])
+    let duration = try await MediaProbe.probe(source).duration
+    let start = value("--start").flatMap(Format.parseDuration) ?? 0
+    let end = value("--end").flatMap(Format.parseDuration) ?? duration
+    let range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 90_000),
+                            end: CMTime(seconds: end, preferredTimescale: 90_000))
+    let began = Date()
+    try await AudioReencoder.export(source: source, range: range,
+                                    mode: arguments.contains("--exact") ? .exact : .keyframe,
+                                    audioBitRate: (value("--kbps").flatMap(Int.init) ?? 96) * 1000, to: output)
+    let result = try await MediaProbe.probe(output)
+    print("wrote \(output.lastPathComponent): \(Format.duration(result.duration)), \(Format.bytes(result.fileSize)) in \(String(format: "%.2f", Date().timeIntervalSince(began)))s")
+case "transcode" where arguments.count >= 3:
+    func option(_ flag: String) -> String? {
+        arguments.firstIndex(of: flag).flatMap { i in i + 1 < arguments.count ? arguments[i + 1] : nil }
+    }
+    let source = URL(fileURLWithPath: arguments[1]), output = URL(fileURLWithPath: arguments[2])
+    var settings = TranscodeSettings()
+    settings.codec = option("--codec") == "h264" ? .h264 : .hevc
+    settings.maxShortSide = option("--short").flatMap(Int.init)
+    settings.frameRateCap = option("--fps").flatMap(Int.init) ?? 30
+    settings.keepHDR = !arguments.contains("--sdr")
+    settings.forceSoftwareEncoder = arguments.contains("--software")
+    settings.container = output.pathExtension.lowercased() == "mov" ? .mov : .mp4
+    if let kbps = option("--audio").flatMap(Int.init) { settings.audio = AudioPlan(kbps: kbps) }   // 0 = keep
+    if let v = option("--vbr").flatMap(Int.init) { settings.rateControl = .variableBitRate(v * 1000) }
+    if let v = option("--abr").flatMap(Int.init) { settings.rateControl = .averageBitRate(v * 1000) }
+    if let v = option("--cq").flatMap(Double.init) { settings.rateControl = .constantQuality(v) }
+    if let v = option("--qp").flatMap(Double.init) { settings.rateControl = .fixedQuality(v) }
+    var range: CMTimeRange?
+    if option("--start") != nil || option("--end") != nil {
+        let duration = try await MediaProbe.probe(source).duration
+        let start = option("--start").flatMap(Format.parseDuration) ?? 0
+        let end = option("--end").flatMap(Format.parseDuration) ?? duration
+        range = CMTimeRange(start: CMTime(seconds: start, preferredTimescale: 90_000),
+                            end: CMTime(seconds: end, preferredTimescale: 90_000))
+    }
+    let result = try await Transcoder.transcode(source: source, range: range, settings: settings, to: output)
+    let out = try await MediaProbe.probe(output)
+    let plan = result.plan
+    print("""
+        wrote \(output.lastPathComponent): \(Int(plan.outputSize.width))x\(Int(plan.outputSize.height)) \(plan.hdr.rawValue), \
+        \(result.usedHardwareEncoder == false ? "software" : "hardware") \(result.rateControl.label), \(Format.duration(out.duration)), \(Format.bytes(out.fileSize)) \
+        (video \(Format.bitRate(out.video?.bitRate ?? 0))), frames \(result.framesEncoded)/\(result.framesRead), \
+        \(String(format: "%.2f", result.seconds))s
+        """)
 default:
     print(usage)
     exit(CommandLine.arguments.count > 1 ? 64 : 0)

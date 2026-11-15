@@ -33,17 +33,41 @@ struct ExportSheet: View {
                     ScrollView {
                         finished(url: url, info: info, seconds: seconds)
                     }
-                case .failed(let message):
-                    failed(message)
+                case .failed(let failure):
+                    failed(failure)
                 }
             }
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .navigationTitle("Export")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbar }
             .overlay(alignment: .top) { bannerView }
         }
         .interactiveDismissDisabled(isRunning)
+    }
+
+    /// Standard sheet buttons: Cancel (top-left) while running, Done or
+    /// Close (top-right) afterwards.
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        switch job.state {
+        case .running:
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", role: .cancel) {
+                    job.cancel()
+                    dismiss()
+                }
+            }
+        case .finished:
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { dismiss() }
+            }
+        case .failed:
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Close") { dismiss() }
+            }
+        }
     }
 
     private var isRunning: Bool {
@@ -61,14 +85,21 @@ struct ExportSheet: View {
     private func running(_ progress: Double) -> some View {
         VStack(spacing: 20) {
             ProgressView(value: progress) {
-                Text("Copying…")
+                Text(job.activity)
             } currentValueLabel: {
                 Text(progress.formatted(.percent.precision(.fractionLength(0))))
             }
-            Button("Cancel", role: .cancel) {
-                job.cancel()
-                dismiss()
+            Label {
+                Text("Keep FootBrake open until this finishes. Switching to another app or locking your phone will stop the export.")
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
             }
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -85,6 +116,11 @@ struct ExportSheet: View {
                 Text("Done in \(String(format: "%.1f", seconds)) s · was \(Format.bytes(job.source.info.fileSize))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let note = job.encoderNote {
+                    Label(note, systemImage: note.hasPrefix("Encoded with hardware") ? "cpu" : "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(note.hasPrefix("Encoded with hardware") ? Color.secondary : Color.orange)
+                }
             }
 
             if !actions.isEmpty { actionList }
@@ -100,9 +136,6 @@ struct ExportSheet: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-
-                Button("Done") { dismiss() }
-                    .padding(.top, 8)
             }
             .controlSize(.large)
 
@@ -112,14 +145,25 @@ struct ExportSheet: View {
         }
     }
 
-    private func failed(_ message: String) -> some View {
+    private func failed(_ failure: ExportFailure) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.orange)
-            Text("Export failed").font(.headline)
-            Text(message).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("Close") { dismiss() }.buttonStyle(.bordered)
+            Text(failure.title).font(.headline)
+            Text(failure.explanation).multilineTextAlignment(.center)
+            Button {
+                job.retry()
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            Text(failure.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
         }
     }
 

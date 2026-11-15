@@ -118,6 +118,13 @@ struct MediaProbeUnitTests {
                 == ISO8601DateFormatter().date(from: "2026-11-15T06:49:14Z"))
     }
 
+    @Test func approximateSizes() {
+        #expect(Format.approximateBytes(88_100_000) == Format.bytes(88_000_000))
+        #expect(Format.approximateBytes(2_149_000) == Format.bytes(2_100_000))
+        #expect(Format.approximateBytes(154_700_000) == Format.bytes(150_000_000))
+        #expect(Format.approximateBytes(0) == Format.bytes(0))
+    }
+
     @Test func durationFormatting() {
         #expect(Format.duration(62.5) == "1:02.500")
         #expect(Format.duration(3723.45) == "1:02:03.450")
