@@ -6,7 +6,7 @@ Paste into App Store Connect. Character limits in brackets.
 
 | Field                    | Value                                                           |
 |--------------------------|-----------------------------------------------------------------|
-| Name [30]                | FootBrake: a HandBrake homage (fallback: FootBrake Transcoder)  |
+| Name [30]                | FootBrake: a HandBrake homage                                   |
 | Subtitle [30]            | Open Source video compressor                                    |
 | Primary category         | Photo & Video                                                   |
 | Secondary category       | Utilities                                                       |
@@ -19,8 +19,8 @@ Paste into App Store Connect. Character limits in brackets.
 | App privacy              | Data Not Collected                                              |
 | Encryption               | None beyond Apple's (ITSAppUsesNonExemptEncryption = NO is set) |
 
-"FootBrake" alone is reserved by another developer. The planned store name, "FootBrake: a
-HandBrake homage", waits on the HandBrake team's OK to use their name; if they decline, use
+"FootBrake" alone is reserved by another developer, so the store name is "FootBrake: a
+HandBrake homage". The HandBrake team has been asked about it; if they ever object, switch to
 "FootBrake Transcoder". The name under the app icon on the home screen stays "FootBrake".
 
 ## Promotional text [170]
