@@ -39,6 +39,7 @@ struct ExportFailure {
             + "Try again, and keep FootBrake open if it happens again.",
         detail: "Background task expired")
 
+    @MainActor
     init(_ error: Error, wentToBackground: Bool) {
         let ns = error as NSError
         detail = "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
@@ -52,8 +53,9 @@ struct ExportFailure {
                 + "Close it or end the call, then try again."
         } else if Self.isOutOfSpace(ns) {
             title = "Not enough storage"
-            explanation = "Your iPhone ran out of space while writing the video. "
-                + "Free up some storage in Settings › General › iPhone Storage, then try again."
+            let device = UIDevice.current.model   // "iPhone" or "iPad"
+            explanation = "Your \(device) ran out of space while writing the video. "
+                + "Free up some storage in Settings › General › \(device) Storage, then try again."
         } else {
             title = "Export failed"
             explanation = "Something went wrong while exporting. Trying again often works; "

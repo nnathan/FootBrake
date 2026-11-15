@@ -53,6 +53,7 @@ struct HomeView: View {
                 }
                 .controlSize(.large)
                 .disabled(isImporting)
+                .frame(maxWidth: 420)   // phone width on iPad, rather than edge to edge
             }
             .padding(24)
             .navigationTitle("FootBrake")
@@ -85,12 +86,13 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showingDeviceInfo) { AboutView() }
         #if DEBUG
-        // Simulator testing: `simctl launch … -FBOpen /path/to/clip.mov`
+        // Simulator testing: `simctl launch … -FBOpen /path/to/clip.mov` or `-FBShowAbout`
         .task {
             let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "-FBOpen"), i + 1 < args.count {
                 await importFromFiles(URL(fileURLWithPath: args[i + 1]))
             }
+            if args.contains("-FBShowAbout") { showingDeviceInfo = true }
         }
         #endif
         .alert("Couldn't Open Video", isPresented: .constant(errorMessage != nil)) {

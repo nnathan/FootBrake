@@ -30,11 +30,20 @@ struct EditorView: View {
     private var info: MediaInfo { model.source.info }
 
     var body: some View {
+        GeometryReader { geometry in
+            editor(playerHeight: min(560, geometry.size.height * 0.45))
+        }
+    }
+
+    /// The player takes at most 45% of the height (capped at 560 pt), so the
+    /// trim controls and settings keep room in every orientation, including
+    /// a landscape iPhone.
+    private func editor(playerHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
             Color.black
                 .aspectRatio(playerAspectRatio, contentMode: .fit)
                 .overlay(PlayerLayerView(player: model.player))
-                .frame(maxWidth: .infinity, maxHeight: 360)
+                .frame(maxWidth: .infinity, maxHeight: playerHeight)
                 .background(Color.black)
                 .onTapGesture { model.togglePlay() }
 
@@ -214,7 +223,7 @@ struct EditorView: View {
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         guard let free = values?.volumeAvailableCapacityForImportantUsage, free < needed else { return nil }
         return "This export needs about \(Format.approximateBytes(needed)), but only \(Format.bytes(free)) is free. "
-            + "Free up space in Settings › General › iPhone Storage, or trim the video or pick a smaller preset."
+            + "Free up space in Settings › General › \(UIDevice.current.model) Storage, or trim the video or pick a smaller preset."
     }
 
     // MARK: - Metadata
@@ -409,8 +418,8 @@ struct EditorView: View {
             let other: VideoCodec = codec == .hevc ? .h264 : .hevc
             if !model.isHardware(codec) {
                 notes.append(model.isHardware(other)
-                    ? "This iPhone has no hardware encoder for \(codec.displayName); \(other.displayName) would be much faster."
-                    : "This iPhone has no hardware video encoder available, so exports will be slow.")
+                    ? "This device has no hardware encoder for \(codec.displayName); \(other.displayName) would be much faster."
+                    : "This device has no hardware video encoder available, so exports will be slow.")
             }
             if let limit = preset.targetFileSize {
                 notes.append("The size is chosen from the length so the file stays under \(Format.bytes(limit)); "
