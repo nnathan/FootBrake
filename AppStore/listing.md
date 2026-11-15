@@ -42,7 +42,7 @@ Pick a video from Photos or Files, trim it to the part you want, and choose how 
 
 • Copy: trim without re-encoding, so the picture is untouched
 • Original size, 1080p, 720p or 480p: transcode with the iPhone's hardware encoder, in HEVC or H.264, at 30 or 60 fps
-• Fit in 25 MB or Fit in 10 MB: picks the resolution and bitrate so the file fits common email and messaging limits
+• Fit in size: choose 10, 20, 50 or 100 MB, or your own limit, and FootBrake picks the resolution and bitrate so the file fits
 
 FootBrake also:
 
@@ -58,7 +58,7 @@ FootBrake is free and open source software, licensed under the GNU GPL v3. There
 ## App Review notes
 
 FootBrake needs no account or sign-in. To try it: tap "Choose from Photos", pick any video,
-optionally trim it, choose a preset under Export (for example "720p" or "Fit in 10 MB") and tap
+optionally trim it, choose a preset under Export (for example "720p" or "Fit in size") and tap
 Export. The result can be saved to Photos or shared.
 
 Re-encoding uses the hardware video encoder and runs while the app is open; copies (no
@@ -70,7 +70,7 @@ FootBrake is open source: https://github.com/nnathan/FootBrake
 ## TestFlight: what to test
 
 Thanks for testing FootBrake! Try trimming, compressing and sharing your own videos, especially
-long, 4K, HDR, slo-mo and portrait clips, and the "Fit in 10/25 MB" presets.
+long, 4K, HDR, slo-mo and portrait clips, and the "Fit in size" preset with different limits.
 
 FootBrake has not been tested on a real iPad yet (only the simulator), so iPad feedback is
 especially welcome.

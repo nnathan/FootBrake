@@ -354,6 +354,7 @@ paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |
 | **7. Polish** | App icon, About/credits, App Store prep. **No share extension** (decision 2026-11-15): iOS won't let a share extension open its app, so it needed an extra "open FootBrake" step; importing from inside FootBrake is simpler | Manual |
 | **Later (not v1)** | Background re-encodes on devices without background GPU (incl. iPhone 17 Pro Max): replace the GPU video composition with `VTPixelRotationSession` + `VTPixelTransferSession`, *if* the media engine runs under a continued-processing task (untested). v1: copies run in the background (iOS 26+); re-encodes need FootBrake open | Only if users ask |
+| **Later (not v1)** | Container picker ("Copy as MP4"): no picker in 1.0 (decision 2026-11-16). Copy keeps the source's container so a 1:1 copy keeps everything (MOV carries spatial audio, camera data, make/model); re-encodes are MP4 for compatibility. A "Copy as MP4" toggle via the remux path would drop APAC and camera data | Only if users ask |
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
 | **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |
 

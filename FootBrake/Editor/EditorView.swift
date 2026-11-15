@@ -20,6 +20,9 @@ struct EditorView: View {
 
     enum DateChoice: Hashable { case original, custom, remove }
 
+    /// "Fit in size" limit in MB: one of the preset choices, or 0 for custom.
+    @AppStorage("fitSizeChoice") private var fitSizeChoice: Double = 20
+    @AppStorage("fitSizeCustomMB") private var fitSizeCustomMB: Double = 40
     /// Which audio track(s) to keep; chosen per video.
     @State private var audioTrack: AudioTrackChoice = .automatic
     /// Audio picker value (0 = keep), remembered per preset in UserDefaults.
@@ -63,6 +66,7 @@ struct EditorView: View {
                 metadataSection
                 exportButtonSection
             }
+            .scrollDismissesKeyboard(.interactively)
         }
         .navigationTitle(info.fileName)
         .navigationBarTitleDisplayMode(.inline)
@@ -73,6 +77,14 @@ struct EditorView: View {
                 } label: {
                     Label("Video Details", systemImage: "info.circle")
                 }
+            }
+            // The number pad (custom size limit) has no Return key.
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+                .bold()
             }
         }
         .sheet(isPresented: $showingInfo) { SourceInfoView(info: info) }
@@ -211,7 +223,7 @@ struct EditorView: View {
                                          audioTrack: effectiveAudioTrack)
                 default:
                     job.startTranscode(range: model.selectionRange, settings: transcodeSettings,
-                                       suffix: preset.fileSuffix)
+                                       suffix: exportSuffix)
                 }
                 exportJob = job
             } label: {
@@ -336,6 +348,39 @@ struct EditorView: View {
         if sourceIsHDR && codec == .hevc {
             Toggle("Keep HDR", isOn: $keepHDR)
         }
+        if preset == .fitSize {
+            // A labelled menu row: segmented pickers in a form hide their label.
+            Picker("Size limit", selection: $fitSizeChoice) {
+                // Hint on the same line: menu pickers drop second lines on some iOS versions.
+                ForEach(OutputPreset.fitSizeChoices, id: \.self) { mb in
+                    Text("\(Int(mb)) MB · \(OutputPreset.fitSizeHint(mb))").tag(mb)
+                }
+                Text("Custom…").tag(0.0)
+            }
+            .pickerStyle(.menu)
+            .onAppear {
+                // A remembered size that's no longer a choice becomes a custom one.
+                if fitSizeChoice != 0 && !OutputPreset.fitSizeChoices.contains(fitSizeChoice) {
+                    fitSizeCustomMB = fitSizeChoice
+                    fitSizeChoice = 0
+                }
+            }
+            if fitSizeChoice == 0 {
+                LabeledContent("Custom limit") {
+                    HStack(spacing: 4) {
+                        TextField("MB", value: $fitSizeCustomMB, format: .number)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(maxWidth: 100)
+                        Text("MB").foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: fitSizeCustomMB) { value in
+                    let range = OutputPreset.fitSizeRange
+                    if !range.contains(value) { fitSizeCustomMB = min(max(value, range.lowerBound), range.upperBound) }
+                }
+            }
+        }
         let plan = model.plan(for: transcodeSettings)
         LabeledContent("Output", value: outputDescription(plan))
         if plan.isStarved {
@@ -374,7 +419,7 @@ struct EditorView: View {
             .pickerStyle(.segmented)
             .onChange(of: audioKbps) { UserDefaults.standard.set($0, forKey: audioKey(preset)) }
         }
-        if let limit = preset.targetFileSize, preset != .copy {
+        if preset == .fitSize, let limit = transcodeSettings.targetFileSize {
             LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize)) (limit \(Format.bytes(limit)))")
         } else {
             LabeledContent("Estimated size", value: "≈ \(Format.approximateBytes(estimatedSize))")
@@ -445,8 +490,17 @@ struct EditorView: View {
         UserDefaults.standard.object(forKey: audioKey(preset)) as? Int ?? preset.defaultAudioKbps
     }
 
+    private var fitSizeMB: Double { fitSizeChoice == 0 ? fitSizeCustomMB : fitSizeChoice }
+
+    /// File-name suffix, e.g. "720p" or, for Fit in size, "25MB".
+    private var exportSuffix: String {
+        guard preset == .fitSize else { return preset.fileSuffix }
+        return fitSizeMB.formatted(.number.precision(.fractionLength(0...1))) + "MB"
+    }
+
     private var transcodeSettings: TranscodeSettings {
-        var settings = preset.settings(codec: codec, frameRateCap: frameRateCap, keepHDR: keepHDR, audioKbps: audioKbps)
+        var settings = preset.settings(codec: codec, frameRateCap: frameRateCap, keepHDR: keepHDR, audioKbps: audioKbps,
+                                       fitSizeMB: fitSizeMB)
         settings.audioTrack = effectiveAudioTrack
         #if DEBUG
         settings.forceSoftwareEncoder = UserDefaults.standard.bool(forKey: DebugSettings.simulateSoftwareEncoders)
@@ -484,9 +538,14 @@ struct EditorView: View {
                     ? "This device has no hardware encoder for \(codec.displayName); \(other.displayName) would be much faster."
                     : "This device has no hardware video encoder available, so exports will be slow.")
             }
-            if let limit = preset.targetFileSize {
-                notes.append("The size is chosen from the length so the file stays under \(Format.bytes(limit)); "
-                    + "if it comes out over, FootBrake re-encodes once at a lower bitrate.")
+            if preset == .fitSize, let limit = transcodeSettings.targetFileSize {
+                if Double(estimatedSize) < Double(limit) * 0.8 {
+                    notes.append("This clip fits comfortably at full quality, so the file will be smaller than "
+                        + "\(Format.bytes(limit)) rather than padded to the limit.")
+                } else {
+                    notes.append("The size is chosen from the length so the file stays under \(Format.bytes(limit)); "
+                        + "if it comes out over, FootBrake re-encodes once at a lower bitrate.")
+                }
             }
             if sourceIsHDR && (codec == .h264 || !keepHDR) {
                 notes.append("HDR will be converted to standard range, so it looks right on any screen.")

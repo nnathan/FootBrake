@@ -16,22 +16,23 @@ struct FitPlanTests {
                   metadata: CaptureMetadata())
     }
 
-    private func shortSide(_ preset: OutputPreset, seconds: Double) -> Int {
-        let settings = preset.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64)
+    private func shortSide(_ megabytes: Double, seconds: Double) -> Int {
+        let settings = OutputPreset.fitSize.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64,
+                                                     fitSizeMB: megabytes)
         let plan = TranscodePlan(source: source(duration: seconds), settings: settings)
         return Int(min(plan.outputSize.width, plan.outputSize.height))
     }
 
     // Matches HandBrake's "Social 25 MB / 10 MB" presets.
     @Test func resolutionFollowsLength() {
-        #expect(shortSide(.fit25MB, seconds: 30) == 1080)
-        #expect(shortSide(.fit25MB, seconds: 60) == 720)
-        #expect(shortSide(.fit25MB, seconds: 300) == 360)
-        #expect(shortSide(.fit10MB, seconds: 60) == 540)
+        #expect(shortSide(25, seconds: 30) == 1080)
+        #expect(shortSide(25, seconds: 60) == 720)
+        #expect(shortSide(25, seconds: 300) == 360)
+        #expect(shortSide(10, seconds: 60) == 540)
     }
 
     @Test func bitrateFitsTheBudget() {
-        let settings = OutputPreset.fit10MB.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64)
+        let settings = OutputPreset.fitSize.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64, fitSizeMB: 10)
         let plan = TranscodePlan(source: source(duration: 60), settings: settings)
         guard case .averageBitRate(let video) = plan.rateControl else { Issue.record("not ABR"); return }
         let bytes = Double(video + 64_000) * 60 / 8
@@ -39,15 +40,24 @@ struct FitPlanTests {
         #expect(bytes > 10_000_000 * 0.9)
     }
 
+    @Test func largerLimitsAndCustomSizes() {
+        #expect(shortSide(100, seconds: 60) == 1080)
+        #expect(shortSide(50, seconds: 300) == 540)
+        // Out-of-range custom values are clamped (1 MB minimum).
+        let tiny = OutputPreset.fitSize.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64,
+                                                 fitSizeMB: 0.1)
+        #expect(tiny.targetFileSize == 1_000_000)
+    }
+
     @Test func trimmedSelectionGetsMoreBits() {
-        let settings = OutputPreset.fit10MB.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64)
+        let settings = OutputPreset.fitSize.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64, fitSizeMB: 10)
         let whole = TranscodePlan(source: source(duration: 300), settings: settings)
         let trimmed = TranscodePlan(source: source(duration: 300), settings: settings, duration: 30)
         #expect(trimmed.outputSize.height > whole.outputSize.height)
     }
 
     @Test func veryLongClipIsStarved() {
-        let settings = OutputPreset.fit10MB.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64)
+        let settings = OutputPreset.fitSize.settings(codec: .h264, frameRateCap: 30, keepHDR: false, audioKbps: 64, fitSizeMB: 10)
         let plan = TranscodePlan(source: source(duration: 1800), settings: settings)
         #expect(plan.isStarved)
         #expect(min(plan.outputSize.width, plan.outputSize.height) == 240)
