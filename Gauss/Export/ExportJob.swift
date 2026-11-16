@@ -42,7 +42,7 @@ struct ExportFailure {
     @MainActor
     init(_ error: Error, wentToBackground: Bool) {
         let ns = error as NSError
-        detail = "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
+        detail = "\(ns.localizedDescription) (\(ns.domain) \(ns.code))" + Self.mediaDetail(ns)
         if wentToBackground {
             title = "Export stopped"
             explanation = "Gauss left the screen during the export, so iOS stopped the video encoder. "
@@ -51,6 +51,10 @@ struct ExportFailure {
             title = "Video encoder busy"
             explanation = "Another app may be using the camera, recording, streaming or on a call. "
                 + "Close it or end the call, then try again."
+        } else if ns.domain == AVFoundationErrorDomain && ns.code == AVError.decoderNotFound.rawValue {
+            title = "Can't decode this video"
+            explanation = "This device has no decoder for the video's format, so it can't be re-encoded. "
+                + "Copy still works, because it doesn't decode the video."
         } else if Self.isOutOfSpace(ns) {
             title = "Not enough storage"
             let device = UIDevice.current.model   // "iPhone" or "iPad"
@@ -61,6 +65,16 @@ struct ExportFailure {
             explanation = "Something went wrong while exporting. Trying again often works; "
                 + "if it keeps failing, the details below will help track it down."
         }
+    }
+
+    /// The media type and codec AVFoundation names for a decode or encode
+    /// failure, e.g. " · vide hev1".
+    private static func mediaDetail(_ error: NSError) -> String {
+        let type = error.userInfo[AVErrorMediaTypeKey] as? String
+        let subtypes = (error.userInfo[AVErrorMediaSubTypeKey] as? [NSNumber])?
+            .map { MediaProbe.fourCCString(FourCharCode($0.uint32Value)) } ?? []
+        let parts = [type].compactMap { $0 } + subtypes
+        return parts.isEmpty ? "" : " · " + parts.joined(separator: " ")
     }
 
     private static func isOutOfSpace(_ error: NSError) -> Bool {

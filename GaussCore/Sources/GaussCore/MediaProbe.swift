@@ -199,7 +199,7 @@ public enum MediaProbe {
         CMFormatDescriptionGetExtension(format, extensionKey: key)
     }
 
-    static func fourCCString(_ code: FourCharCode) -> String {
+    public static func fourCCString(_ code: FourCharCode) -> String {
         let bytes = [24, 16, 8, 0].map { UInt8((code >> $0) & 0xFF) }
         return String(decoding: bytes, as: UTF8.self)
     }

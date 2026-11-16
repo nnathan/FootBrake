@@ -203,7 +203,10 @@ struct EditorView: View {
                 codec = newPreset.defaultCodec
                 audioKbps = storedAudioKbps(for: newPreset)
             }
-            .onAppear { audioKbps = storedAudioKbps(for: preset) }
+            .onAppear {
+                if !canDecodeVideo { preset = .copy }
+                audioKbps = storedAudioKbps(for: preset)
+            }
 
             if preset == .copy {
                 copyOptions
@@ -324,8 +327,16 @@ struct EditorView: View {
         }
     }
 
+    /// Whether this device can decode the video, which every preset but Copy needs.
+    /// `hev1` HEVC is relabelled on import (`HEVCTagFixer`); it's only still
+    /// `hev1` here if that wasn't possible.
+    private var canDecodeVideo: Bool {
+        info.video?.codecFourCC != "hev1"
+    }
+
     /// Presets that would actually shrink this video (plus Copy and Original).
     private var availablePresets: [OutputPreset] {
+        guard canDecodeVideo else { return [.copy] }
         let short = info.video.map { Double(min($0.displaySize.width, $0.displaySize.height)) } ?? 1080
         return OutputPreset.allCases.filter { $0.reducesSize(ofShortSide: short) }
     }
@@ -530,6 +541,10 @@ struct EditorView: View {
 
     private var footerText: String {
         var notes: [String] = []
+        if !canDecodeVideo {
+            notes.append("This video's HEVC is stored in a form iPhone can't decode (hev1 without its settings "
+                + "in the file header), so it can only be copied, not re-encoded.")
+        }
         if preset == .copy {
             notes.append(model.cutMode == .keyframe
                 ? "Copies the video untouched. The clip starts at the keyframe at or before your start point, which plays everywhere."

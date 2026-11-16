@@ -61,6 +61,13 @@ $FF -f lavfi -i "$VIDEO" -f lavfi -i "$TONE" -t 5 \
 xcrun swift add-apple-metadata.swift out/_metadata_tmp.mov out/iphone_metadata.mov
 rm out/_metadata_tmp.mov
 
+# 9. HEVC 10-bit labelled hev1, as ffmpeg-made films often are; Apple only
+#    decodes it once relabelled hvc1 (HEVCTagFixer)
+$FF -f lavfi -i "testsrc2=size=1920x872:rate=24000/1001" -f lavfi -i "$TONE" -t 3 \
+    -c:v libx265 -preset fast -crf 24 -pix_fmt yuv420p10le -tag:v hev1 \
+    -x265-params log-level=error \
+    -c:a aac -b:a 128k -ac 2 out/hevc_hev1_10bit.mp4
+
 echo "Fixtures written to $(pwd)/out:"
 for f in out/*; do
     ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,channels,color_transfer:stream_side_data=rotation \

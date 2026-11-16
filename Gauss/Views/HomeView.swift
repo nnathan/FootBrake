@@ -160,6 +160,8 @@ struct HomeView: View {
 
     private func open(_ url: URL) async {
         do {
+            // Imports are our own copies, so a hev1 label can be fixed in place.
+            _ = try? await Task.detached { try HEVCTagFixer.fixInPlace(url) }.value
             let info = try await MediaProbe.probe(url)
             path = [SourceVideo(url: url, info: info)]
         } catch {
