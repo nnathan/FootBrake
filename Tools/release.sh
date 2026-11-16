@@ -1,5 +1,5 @@
 #!/bin/sh
-# Archives FootBrake and uploads it to App Store Connect, for TestFlight.
+# Archives Gauss and uploads it to App Store Connect, for TestFlight.
 # The build number is the commit count, so every upload from a new commit
 # gets a higher number. Needs a clean, pushed tree, so the About screen's
 # commit link works and the build matches the public source.
@@ -34,10 +34,10 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
 fi
 
 build=$(git rev-list --count HEAD)
-archive="build/FootBrake-$build.xcarchive"
+archive="build/Gauss-$build.xcarchive"
 export="build/export-$build"
-echo "Archiving FootBrake build $build ($(git rev-parse --short HEAD))…"
-xcodebuild -project FootBrake.xcodeproj -scheme FootBrake -configuration Release \
+echo "Archiving Gauss build $build ($(git rev-parse --short HEAD))…"
+xcodebuild -project Gauss.xcodeproj -scheme Gauss -configuration Release \
     -destination generic/platform=iOS -archivePath "$archive" \
     -allowProvisioningUpdates CURRENT_PROJECT_VERSION="$build" archive
 
@@ -48,14 +48,14 @@ xcodebuild -exportArchive -archivePath "$archive" -exportOptionsPlist Tools/Expo
 
 echo "Re-signing…"
 mkdir "$export/ipa"
-unzip -q "$export/FootBrake.ipa" -d "$export/ipa"
-app="$export/ipa/Payload/FootBrake.app"
+unzip -q "$export/Gauss.ipa" -d "$export/ipa"
+app="$export/ipa/Payload/Gauss.app"
 codesign -d --entitlements - --xml "$app" > "$export/entitlements.plist"
 codesign -f -s "$identity" --entitlements "$export/entitlements.plist" --generate-entitlement-der \
-    -r="designated => anchor apple generic and identifier \"net.lastninja.footbrake\" and certificate leaf[subject.OU] = \"$team\" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */" \
+    -r="designated => anchor apple generic and identifier \"net.lastninja.gauss\" and certificate leaf[subject.OU] = \"$team\" and certificate 1[field.1.2.840.113635.100.6.2.1] /* exists */" \
     "$app"
 codesign --verify --deep --strict "$app"
-ipa="$PWD/$export/FootBrake-$build.ipa"
+ipa="$PWD/$export/Gauss-$build.ipa"
 (cd "$export/ipa" && zip -qry "$ipa" .)
 
 echo "Uploading to App Store Connect…"

@@ -1,17 +1,17 @@
 #!/bin/sh
-# Measures file size vs VMAF for FootBrake's rate-control modes.
+# Measures file size vs VMAF for Gauss's rate-control modes.
 #
 #   Tools/measure.sh <clip>... > results.csv
 #
 # For each clip, size and codec, a near-lossless reference is encoded through
-# FootBrake's own pipeline (same scaling, rotation, frame-rate cap and tone
+# Gauss's own pipeline (same scaling, rotation, frame-rate cap and tone
 # mapping), so VMAF measures only compression loss. Needs Homebrew ffmpeg with
-# libvmaf and a built footbrake-cli (swift build in FootBrakeCore).
+# libvmaf and a built gauss-cli (swift build in GaussCore).
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CLI="$ROOT/FootBrakeCore/.build/debug/footbrake-cli"
-WORK="${TMPDIR:-/tmp}/footbrake-measure"
+CLI="$ROOT/GaussCore/.build/debug/gauss-cli"
+WORK="${TMPDIR:-/tmp}/gauss-measure"
 mkdir -p "$WORK"
 
 SIZES="${SIZES:-1080 720 480}"

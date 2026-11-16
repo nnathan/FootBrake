@@ -1,9 +1,9 @@
-# FootBrake
+# Gauss
 
 Shrink and trim iPhone videos with the hardware encoder. See `PLAN.md`.
 
-Free software in the spirit of [HandBrake](https://handbrake.fr): no ads, no monetisation, no
-telemetry. FootBrake will always respect its users.
+Gauss is free and open source software licensed under GPLv3: no ads, no monetisation, no
+telemetry. Gauss will always respect its users.
 
 <p>
   <img src="Design/readme/home.webp" width="240" alt="Home screen">
@@ -20,23 +20,23 @@ Choose a preset and what metadata to keep, then compare the export with the orig
 
 ## Devices
 
-FootBrake runs on iPhone and iPad with iOS 16 or later. It has been tested on an iPhone 17 Pro
+Gauss runs on iPhone and iPad with iOS 16 or later. It has been tested on an iPhone 17 Pro
 Max; the iPad version has only been checked in the simulator, as we don't have an iPad to test
 on. iPad feedback is very welcome: please open an issue.
 
 ## Layout
-- `FootBrake/`: SwiftUI iOS app (iOS 16+)
-- `FootBrakeCore/`: Swift package holding the media engine, the `footbrake-cli` Mac test harness, and tests
+- `Gauss/`: SwiftUI iOS app (iOS 16+)
+- `GaussCore/`: Swift package holding the media engine, the `gauss-cli` Mac test harness, and tests
 - `Fixtures/make-fixtures.sh`: generates synthetic test clips into `Fixtures/out/` (needs Homebrew ffmpeg)
 - `Config/`: build settings. Copy `Local.xcconfig.example` to `Local.xcconfig` and set your Team ID.
 
 ## Common commands
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-(cd FootBrakeCore && swift test)                 # engine tests on the Mac
-(cd FootBrakeCore && swift run footbrake-cli caps)
+(cd GaussCore && swift test)                 # engine tests on the Mac
+(cd GaussCore && swift run gauss-cli caps)
 ./Fixtures/make-fixtures.sh
-open FootBrake.xcodeproj                         # run on iPhone from Xcode
+open Gauss.xcodeproj                         # run on iPhone from Xcode
 ```
 
 ## Releasing
@@ -49,14 +49,14 @@ App Store listing text is in `AppStore/listing.md`.
 
 Copyright (C) 2026 Naveen Nathan
 
-FootBrake is free software: you can redistribute it and/or modify it under the terms of the
+Gauss is free software: you can redistribute it and/or modify it under the terms of the
 GNU General Public License, version 3, as published by the Free Software Foundation
 (SPDX: `GPL-3.0-only`). It is distributed in the hope that it will
 be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See `LICENSE` for the full text.
 
-Contributions are accepted under the terms in `CONTRIBUTING.md`. The FootBrake name and icon
+Contributions are accepted under the terms in `CONTRIBUTING.md`. The Gauss name and icon
 are not covered by the licence; see `TRADEMARKS.md`.
 
-FootBrake contains no code from HandBrake; its presets and VideoToolbox approach were studied
-as a reference.
+Gauss is a homage to the venerable HandBrake. It contains no code from HandBrake; its presets
+and VideoToolbox approach were studied as a reference.

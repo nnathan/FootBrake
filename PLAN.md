@@ -1,6 +1,6 @@
-# FootBrake — Implementation Plan (draft for review)
+# Gauss — Implementation Plan (draft for review)
 
-A SwiftUI iOS app inspired by HandBrake: pick a video, optionally trim it to a
+A SwiftUI iOS app paying homage to HandBrake: pick a video, optionally trim it to a
 time range, then either **copy it 1:1** (no re-encode) or **transcode it with a
 preset** using the iPhone's hardware encoders.
 
@@ -9,8 +9,15 @@ make them smaller (and optionally shorter), then either share them elsewhere
 (Mail, Messenger, Files, AirDrop) or save them back to Photos with their
 original date and location intact.
 
-**Ethos** (in the spirit of HandBrake): free and open source, no ads, no
-monetisation, no telemetry. FootBrake will always respect its users.
+**Ethos**: free and open source software licensed under GPLv3, no ads, no
+monetisation, no telemetry. Gauss will always respect its users.
+
+**Name** (decision 2026-11-16): renamed from FootBrake to **Gauss**, after Carl
+Friedrich Gauss, because the HandBrake team asked for no look-alike name. App
+Store name "Gauss: Video Transcoder", bundle ID `net.lastninja.gauss`. HandBrake
+stays out of the App Store listing and promotional text. Attribution stays: code
+comments and this plan say where ideas came from, and About and the README say
+"Gauss is a homage to the venerable HandBrake."
 
 ---
 
@@ -36,7 +43,7 @@ LGPL findings in case MKV/WebM input is wanted later.
 Source: `~/code/ffmpeg/ffmpeg-9.0.2` (same release HandBrake 9 uses).
 - FFmpeg is LGPL v2.1+ unless `--enable-gpl` / `--enable-version3` /
   `--enable-nonfree` are passed (`LICENSE.md`; `configure` lines 2029–2064, 4827–4845).
-- Every component FootBrake would want is LGPL: matroska/avi/flv/mpegts/asf/ogg
+- Every component Gauss would want is LGPL: matroska/avi/flv/mpegts/asf/ogg
   demuxers; vp8/vp9/mpeg2/mpeg4/wmv/vc1/h264/hevc/ac3/eac3/dts/truehd/opus/
   vorbis/flac decoders; videotoolbox hwaccel + `h264/hevc_videotoolbox` encoders;
   swscale/swresample. GPL-only pieces are x264, x265, xvid, and ~30 filters we don't need.
@@ -208,7 +215,7 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
   iOS 26.7.1 paths first (`VariableBitRate`, and the forced
   `AverageBitRate` fallback). Then the phone is upgraded to **iOS 27.2** to
   measure `ConstantQualityFactor`. The upgrade is one-way.
-- Mac (`footbrake-cli`): fast bulk runs and relative comparisons; macOS 27
+- Mac (`gauss-cli`): fast bulk runs and relative comparisons; macOS 27
   is not required.
 - Simulator: UI only (no hardware encoder).
 - Before App Store submission: a used iPhone 8/X (A11, stuck on iOS 16) or
@@ -234,7 +241,7 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
 
 ### 3e. Backgrounding (as built, Stage 6)
 - iOS 26+: each export is submitted as a `BGContinuedProcessingTask`
-  (`net.lastninja.footbrake.export.*`, strategy `.fail`, GPU requested where
+  (`net.lastninja.gauss.export.*`, strategy `.fail`, GPU requested where
   supported). It shows system progress and keeps the app running if the user
   leaves. The entitlement `continued-processing.gpu` is granted.
 - **Background GPU is device-dependent.** The iPhone 17 Pro Max reports
@@ -244,7 +251,7 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
 - iOS 16–25: foreground only; screen kept awake during exports.
 - Low storage: export blocked with an explanation if the estimate + 20% +
   50 MB doesn't fit.
-- **No job queue** (decision 2026-11-15): FootBrake is for handling one clip
+- **No job queue** (decision 2026-11-15): Gauss is for handling one clip
   when the need arises (e.g. trimming and sharing a dashcam clip), not batch
   processing, and re-encodes need the app open anyway.
 
@@ -264,13 +271,13 @@ mode we pick. From the iOS 27.2 SDK headers (`VTCompressionProperties.h`):
   video.
 - Photos library (Stage 2): saving byte-identical video data twice creates two
   items, but both show the **first** save's original filename. A repeat save
-  under a new name (FootBrake's button or the share sheet's Save Video)
+  under a new name (Gauss's button or the share sheet's Save Video)
   therefore uses a fresh passthrough copy (new container
   timestamps) first. Verified on device 2026-11-15.
 
 ## 4. Presets (inspired by `~/code/handbrake/preset/preset_builtin.json`)
 
-| FootBrake preset | Video | Max size (short side) | Frame rate | Audio | HandBrake analogue |
+| Gauss preset | Video | Max size (short side) | Frame rate | Audio | HandBrake analogue |
 |---|---|---|---|---|---|
 | **Copy (no re-encode)** | passthrough | source | source | passthrough | n/a |
 | **Original Size — HEVC** | HEVC (10-bit if HDR) | source | 30 / 60 | AAC 160k / copy | H.265 Apple VideoToolbox |
@@ -309,8 +316,8 @@ presets can be saved as JSON later. Before encoding, the UI always shows the
 ## 5. App structure
 
 ```
-FootBrake.xcodeproj
-├── FootBrake (iOS app, SwiftUI)
+Gauss.xcodeproj
+├── Gauss (iOS app, SwiftUI)
 │   ├── SourceView        – PhotosPicker + .fileImporter, recent sources
 │   ├── InspectorView     – codec, resolution, fps, duration, bitrate, HDR, tracks
 │   ├── TrimView          – AVPlayer preview, filmstrip (AVAssetImageGenerator),
@@ -319,12 +326,12 @@ FootBrake.xcodeproj
 │   ├── PresetView        – preset list + est. size; Custom editor
 │   ├── ExportView        – progress, cancel, thermal warnings
 │   └── OutputView        – Save to Photos / Save to Files / ShareLink (Mail, Messenger…)
-├── FootBrakeCore (local Swift package, no UI; iOS + macOS)
+├── GaussCore (local Swift package, no UI; iOS + macOS)
 │   ├── MediaProbe        – AVURLAsset.load(.tracks, .duration, formatDescriptions…)
 │   ├── Capabilities      – VT encoder probing per device
 │   ├── Preset / JobPlanner – preset + source → concrete EncodeSettings (pure, unit-testable)
 │   └── TranscodeEngine   – reader/writer pipeline, AsyncStream<Progress>
-└── footbrake-cli (macOS command-line tool using FootBrakeCore)
+└── gauss-cli (macOS command-line tool using GaussCore)
 ```
 
 Why the separate Core package plus a Mac CLI: VideoToolbox and AVFoundation
@@ -338,22 +345,22 @@ Tooling: Swift 6, SwiftUI, **Xcode 27.2**, **iOS 16.0 minimum**, **App Store tar
 (nothing is submitted until you finish testing). `xcode-select` points at
 CommandLineTools; I'd build with `DEVELOPER_DIR=/Applications/Xcode.app/...`
 or you'd run `sudo xcode-select -s /Applications/Xcode.app`. Signing uses your
-paid team via automatic signing; bundle ID `net.lastninja.footbrake` (changeable).
+paid team via automatic signing; bundle ID `net.lastninja.gauss` (changeable).
 
 ## 6. Staged delivery — each stage ends with something you test
 
 | Stage | Deliverable | How we test |
 |---|---|---|
-| **0. Scaffold** | Xcode project, Core package, CLI, "Hello FootBrake" on your iPhone; ffmpeg-generated fixture clips (H.264/HEVC, HDR HLG, portrait, 60fps, VFR, 5.1 audio, multi-audio) | App launches on device; `swift test` passes |
+| **0. Scaffold** | Xcode project, Core package, CLI, "Hello Gauss" on your iPhone; ffmpeg-generated fixture clips (H.264/HEVC, HDR HLG, portrait, 60fps, VFR, 5.1 audio, multi-audio) | App launches on device; `swift test` passes |
 | **1. Import & inspect** | Pick from Photos/Files, show full media info, play it | Compare InspectorView against `ffprobe` for each fixture + your own camera-roll clips |
 | **2. Trim + Copy** | Trim UI, passthrough export with keyframe snap/edit-list option, save/share | `ffprobe` output durations & first PTS; no quality loss (bit-identical frames) |
 | **3. Transcode** | Original-size / 1080 / 720 / 480 presets, H.264 & HEVC, AAC, fps cap, progress + cancel | CLI on Mac first (VMAF scores, sizes), then device: speed, thermal, playback in Photos |
-| **3½. Metadata** | Editor "Metadata" section: Remove location, Remove device info (toggles, remembered), Recording date Original / Custom (date-time picker, starts at original, phone's time zone) / Remove (not remembered). Rows show current values and only appear if present. Export button moves below it. Applies to Copy, shrink-audio, transcode and Save to Photos; Copy+Keep drops camera-data tracks if they carry location/device data | `ffprobe` + FootBrake probe for every combination; Photos info panel |
+| **3½. Metadata** | Editor "Metadata" section: Remove location, Remove device info (toggles, remembered), Recording date Original / Custom (date-time picker, starts at original, phone's time zone) / Remove (not remembered). Rows show current values and only appear if present. Export button moves below it. Applies to Copy, shrink-audio, transcode and Save to Photos; Copy+Keep drops camera-data tracks if they carry location/device data | `ffprobe` + Gauss probe for every combination; Photos info panel |
 | **4. Small Streaming** | 10 MB / 25 MB target-size presets with size check + retry, size estimate in UI | Outputs ≤ target for a range of durations; send via Mail / Messenger |
 | **5. Fidelity** | HDR keep/tone-map, metadata copy, rotation edge cases, audio track selection | Saved-to-Photos item shows correct date/location/orientation; HDR badge |
 | **6. Robustness** | Backgrounding (BGContinuedProcessingTask on 26+), interruptions, low disk, job queue | Lock phone mid-export, incoming call, fill disk |
-| **7. Polish** | App icon, About/credits, App Store prep. **No share extension** (decision 2026-11-15): iOS won't let a share extension open its app, so it needed an extra "open FootBrake" step; importing from inside FootBrake is simpler | Manual |
-| **Later (not v1)** | Background re-encodes on devices without background GPU (incl. iPhone 17 Pro Max): replace the GPU video composition with `VTPixelRotationSession` + `VTPixelTransferSession`, *if* the media engine runs under a continued-processing task (untested). v1: copies run in the background (iOS 26+); re-encodes need FootBrake open | Only if users ask |
+| **7. Polish** | App icon, About/credits, App Store prep. **No share extension** (decision 2026-11-15): iOS won't let a share extension open its app, so it needed an extra "open Gauss" step; importing from inside Gauss is simpler | Manual |
+| **Later (not v1)** | Background re-encodes on devices without background GPU (incl. iPhone 17 Pro Max): replace the GPU video composition with `VTPixelRotationSession` + `VTPixelTransferSession`, *if* the media engine runs under a continued-processing task (untested). v1: copies run in the background (iOS 26+); re-encodes need Gauss open | Only if users ask |
 | **Later (not v1)** | Container picker ("Copy as MP4"): no picker in 1.0 (decision 2026-11-16). Copy keeps the source's container so a 1:1 copy keeps everything (MOV carries spatial audio, camera data, make/model); re-encodes are MP4 for compatibility. A "Copy as MP4" toggle via the remux path would drop APAC and camera data | Only if users ask |
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
 | **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |

@@ -5,7 +5,7 @@
 	<!-- Keys Xcode can't generate from build settings; merged with the generated Info.plist. -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>net.lastninja.footbrake.export.*</string>
+		<string>net.lastninja.gauss.export.*</string>
 	</array>
 </dict>
 </plist>
