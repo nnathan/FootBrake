@@ -365,6 +365,58 @@ paid team via automatic signing; bundle ID `net.lastninja.gauss` (changeable).
 | **Later (not v1)** | ffmpeg (LGPL) input module for MKV/WebM/AVI, see 1a | Only if wanted |
 | **Later (not v1)** | Photos library access for unrendered originals: raw high-frame-rate slo-mo, and Cinematic with depth/focus data (Cinematic framework) | Only if wanted |
 
+## 8. Post-1.0 roadmap (agreed 2026-11-16)
+
+1. **Multiple slices from one clip** (e.g. keep 0–2 s and 5–8 s, joined).
+   Lives inside the existing editor; no home-screen change. Design below.
+2. **Join videos**, with a two-button home screen: "Shrink & trim a video"
+   and "Join videos", each then offering Photos or Files. Start narrow:
+   lossless join when all clips match (codec, profile, size, frame rate,
+   HDR, audio); otherwise transcode all to the chosen preset ("match the
+   first clip" by default), letterboxing mixed orientations. No mixing of
+   copied and re-encoded segments. Only if users ask.
+
+### 8a. Multi-slice design (for review before coding)
+
+**Model.** The selection becomes a list of slices, each a start–end range,
+kept in time order, never overlapping, at least 0.1 s long. One slice
+covering the whole clip is the default, so the editor behaves exactly as
+today until you add a second slice.
+
+**Filmstrip.** Every slice is drawn as a yellow-framed range; everything
+outside the slices is dimmed. One slice is *selected* (solid frame and
+handles); the others have a thinner frame. Tap a slice to select it. The
+handles, the Start/End fields with their ‹ › nudges, and Set Start / Set End
+all act on the selected slice.
+
+**Adding and removing.**
+- **Add Slice** (next to Set Start / Set End) adds a 2-second slice at the
+  playhead, shortened if it would overlap a neighbour, and selects it. If the
+  playhead is inside an existing slice, it's split there instead, which is
+  the natural way to cut out a middle part: split, then shorten one side.
+- Each slice can be deleted (swipe on its row in the list, or a delete
+  button when selected); the last remaining slice can't be.
+- A compact list under the filmstrip: "1  0:00.0 – 0:02.0", "2  0:05.0 –
+  0:08.0", and **Total length** (the sum), which replaces "Length".
+
+**Playback.** Play runs through the slices in order, skipping the gaps, so
+the preview matches the export.
+
+**Export.**
+- Built from an `AVMutableComposition` of the slices, so rotation, scaling,
+  HDR, the frame-rate cap, audio choice, metadata edits and Fit in size
+  (budgeted on the total length) all work unchanged.
+- **Copy, "At keyframe":** each slice starts at the keyframe at or before its
+  start; the list shows each slice's actual start, as today.
+- **Copy, "Exact":** frame-exact via edit lists. The footnote warns that
+  some web players may hiccup at the joins.
+- **Risk to test first:** whether passthrough reading (Gauss's lossless
+  remux) works from a multi-range composition as well as Apple's export
+  session does. If not, slices that need the remux path fall back to
+  stitching sample ranges directly.
+
+**Not in this feature:** reordering slices, transitions, per-slice settings.
+
 ## 7. Open questions
 
 1. ~~Minimum iOS version~~: decided, iOS 16.0.
