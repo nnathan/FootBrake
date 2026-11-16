@@ -13,9 +13,9 @@ Paste into App Store Connect. Character limits in brackets.
 | Age rating               | 4+ (no objectionable content)                                   |
 | Price                    | Free, no in-app purchases                                       |
 | Copyright                | 2026 Naveen Nathan                                              |
-| Support URL              | https://github.com/nnathan/Gauss/issues                     |
-| Marketing URL (optional) | https://github.com/nnathan/Gauss                            |
-| Privacy policy URL       | https://github.com/nnathan/Gauss/blob/main/PRIVACY.md       |
+| Support URL              | https://github.com/nnathan/Gauss/issues                         |
+| Marketing URL (optional) | https://github.com/nnathan/Gauss                                |
+| Privacy policy URL       | https://github.com/nnathan/Gauss/blob/main/PRIVACY.md           |
 | App privacy              | Data Not Collected                                              |
 | Encryption               | None beyond Apple's (ITSAppUsesNonExemptEncryption = NO is set) |
 
@@ -69,9 +69,9 @@ Gauss is open source: https://github.com/nnathan/Gauss
 
 ## TestFlight: beta description
 
-Gauss is a free and open source video transcoder for iPhone and iPad. It makes videos smaller and shorter using your device's hardware encoder: trim a clip,
-pick a preset or a target file size, then save it to Photos or share it. No ads, no in-app
-purchases, no tracking.
+Gauss is a free and open source video transcoder for iPhone and iPad. It makes videos smaller
+and shorter using your device's hardware encoder: trim a clip, pick a preset or a target file
+size, then save it to Photos or share it. No ads, no in-app purchases, no tracking.
 
 ## TestFlight: what to test
 

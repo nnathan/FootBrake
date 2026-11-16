@@ -13,6 +13,11 @@ struct AboutView: View {
             List {
                 Section {
                     VStack(spacing: 10) {
+                        Image("AboutIcon")
+                            .resizable()
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .accessibilityHidden(true)
                         Text("Gauss").font(.title2.bold())
                         Text("Version \(version)").foregroundStyle(.secondary)
                         commitLabel

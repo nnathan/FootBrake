@@ -58,5 +58,8 @@ FITNESS FOR A PARTICULAR PURPOSE. See `LICENSE` for the full text.
 Contributions are accepted under the terms in `CONTRIBUTING.md`. The Gauss name and icon
 are not covered by the licence; see `TRADEMARKS.md`.
 
+Icon portrait: Christian Albrecht Jensen, 1840 (public domain), via
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Carl_Friedrich_Gauss_1840_by_Jensen.jpg).
+
 Gauss is a homage to the venerable HandBrake. It contains no code from HandBrake; its presets
 and VideoToolbox approach were studied as a reference.
